@@ -26,7 +26,7 @@ name and md5 and at least one copy on an NRAO disk.
 `run_daily.py` does everything, once a day:
 
 1. **Backs up the NRAO Librarian database** with `pg_dump` to
-   `output/nrao-librarian.pgdump`. This takes about 2 minutes and 600 MB. The
+   `output/nrao-librarian.pgdump`. This takes about 3 minutes and 600 MB. The
    new backup replaces the previous day's once it is complete, so backups don't
    pile up.
 2. **Loads from that backup** the tables the report needs into SQLite
@@ -41,7 +41,7 @@ name and md5 and at least one copy on an NRAO disk.
    - Data taking is over, so later runs reuse that copy. They copy again only
      if the NRAO Librarian lists a newer Karoo backup, and then delete the old
      copy.
-   - The load takes about 10 minutes and 12 GB, and happens only when the
+   - The load takes about 20 minutes and 12 GB, and happens only when the
      backup changes. Other days reuse the loaded copy.
 4. **Builds the page and the CSV**, and puts them in `output/`
    (`karoo_nrao_transfer_report.html` and `karoo_nrao_transfer_problems.csv`).

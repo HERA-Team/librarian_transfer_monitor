@@ -354,7 +354,8 @@ function initHeader() {
   $("subtitle").append("Per-night transfer status of " + KINDS.map((k) => k.label).join(", ") +
     " files, comparing the Karoo Librarian (backup of " + m.karoo_asof + ") with the NRAO Librarian (as of " + m.nrao_asof +
     "). Page updated " + m.generated + ". Every file not at NRAO is listed in ",
-    el("a", { href: m.problems_csv, text: m.problems_csv }), ".");
+    el("a", { href: m.problems_csv, text: m.problems_csv }), ". Built daily by ",
+    el("a", { href: "https://github.com/HERA-Team/librarian_transfer_monitor", text: "HERA-Team/librarian_transfer_monitor" }), ".");
   for (const n of m.notes) $("notes").append(el("li", { text: n }));
   KINDS.forEach((k, i) => {
     const b = el("button", { class: "chip", "aria-pressed": "true", text: k.label, title: k.desc || k.label });

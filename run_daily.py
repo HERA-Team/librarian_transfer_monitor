@@ -3,7 +3,7 @@
 
 Each run:
   1. Backs up the NRAO Librarian database with pg_dump to output/nrao-librarian.pgdump
-     (about 2 minutes), replacing the previous day's backup once the new one is
+     (about 3 minutes), replacing the previous day's backup once the new one is
      complete, so backups don't pile up.
   2. Loads from that backup the tables the report needs (files, copies, disks, and
      the events that record each copy's arrival) into WORKDIR/nrao.sqlite.
@@ -11,7 +11,7 @@ Each run:
      (maint.YYYYMMDD.karoo.librarian.dbbackup.pgdump). The first run copies there
      the newest one the NRAO Librarian holds; later runs copy again only if NRAO
      lists a newer one (data taking is over). Loads it into WORKDIR/karoo/, which
-     takes ~10 minutes and ~12 GB, so only when the backup changes.
+     takes ~20 minutes and ~12 GB, so only when the backup changes.
   4. Builds the report, an HTML page and a CSV of every file not at NRAO, and
      puts both in output/.
   5. Copies both into the web directory.
@@ -181,7 +181,7 @@ def karoo_db_for(args, nrao_db, cache_dir, output_dir):
         sys.exit(f"only {free / 1e9:.0f} GB free in {cache_dir}; loading {name} ({size / 1e9:.1f} GB) needs about "
                  f"{4 * size / 1e9:.0f} GB")
     pg_restore = lsql.find_tool("pg_restore", args.pg_restore)
-    say(f"loading the Karoo Librarian backup {dump} with {pg_restore} (about 10 minutes)")
+    say(f"loading the Karoo Librarian backup {dump} with {pg_restore} (about 20 minutes)")
     lsql.load_into_sqlite(lsql.dump_command(pg_restore, dump, lsql.KAROO_TABLES), db, lsql.KAROO_TABLES,
                           event_keep=lsql.karoo_events, event_payload=lsql.karoo_payload,
                           info=dict(name=name, size=size, path=dump))

@@ -2,8 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 
-# Made by run_daily.py: the daily NRAO backup, the latest page and CSV, the cron log (output/),
-# and the SQLite copies of both Librarians (work/).
-/output/*
-!/output/.gitkeep
-/work/
+# Made by run_daily.py: the database backups, the latest page and CSV, the cron log (output/),
+# and the SQLite copies of both Librarians (work/). Either may be a symlink to a bigger disk.
+/output
+/work

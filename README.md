@@ -15,7 +15,8 @@ The output is one self-contained HTML page with these sections:
 - **"Worth analyzing" switch:** limits the whole page to the nights in
   `analysis_nights.json`.
 
-Next to the page goes a CSV listing every file not (correctly) at NRAO.
+Next to the page goes a CSV listing every file not (correctly) at NRAO. Both
+are public at https://data.nrao.edu/hera/librarian/karoo_nrao_transfer_report.html.
 
 A file counts as at NRAO when the NRAO Librarian has a record with the same
 name and md5 and at least one copy on an NRAO disk.
@@ -31,17 +32,22 @@ name and md5 and at least one copy on an NRAO disk.
 2. **Loads from that backup** the tables the report needs into SQLite
    (`work/nrao.sqlite`): files, copies, disks, and the events that record when
    each copy arrived.
-3. **Finds the newest Karoo Librarian backup** that has reached NRAO
-   (`maint.YYYYMMDD.karoo.librarian.dbbackup.pgdump`, located through the NRAO
-   Librarian's own records) and loads its copy events into `work/karoo/`.
-   - The load takes about 10 minutes and 12 GB.
-   - It happens only when a new backup appears. Data taking is over, so that
-     should be rare, and other days reuse the loaded copy.
-   - If no backup is readable, the run falls back on the one loaded before.
+3. **Uses the Karoo Librarian backup kept in `output/`**
+   (`maint.YYYYMMDD.karoo.librarian.dbbackup.pgdump`, about 4 GB) and loads
+   its copy events into `work/karoo/`.
+   - The first run copies the newest Karoo backup that has reached NRAO into
+     `output/`. It finds it through the NRAO Librarian's own records, on a
+     store disk such as `/export/hera/herastore03-1/maint/2026.09/`.
+   - Data taking is over, so later runs reuse that copy. They copy again only
+     if the NRAO Librarian lists a newer Karoo backup, and then delete the old
+     copy.
+   - The load takes about 10 minutes and 12 GB, and happens only when the
+     backup changes. Other days reuse the loaded copy.
 4. **Builds the page and the CSV**, and puts them in `output/`
    (`karoo_nrao_transfer_report.html` and `karoo_nrao_transfer_problems.csv`).
 5. **Copies both to the web directory**,
-   `/lustre/aoc/projects/hera/www/librarian/`.
+   `/lustre/aoc/projects/hera/www/librarian/`, which is served at
+   https://data.nrao.edu/hera/librarian/.
 
 Every file is replaced only once its new version is completely written. A
 failed run leaves the previous backup and page in place and exits non-zero.
@@ -66,30 +72,41 @@ Do all of this as `heramgr`. The NRAO database (PostgreSQL 9.5, database
 `librarian`) lets `heramgr` connect without a password, and other users
 can't connect at all.
 
-1. **Clone the repository.** The examples below assume
+1. **Clone the repository onto Lustre.** The examples below assume
    `/lustre/aoc/projects/hera/heramgr/librarian_transfer_monitor`. It needs
-   about 20 GB free.
+   about 25 GB free: ~20 GB for the SQLite copies in `work/` and ~5 GB for
+   the database backups in `output/`. That's more than `heramgr`'s 20 GB home
+   quota allows, so don't clone under `/users/heramgr`.
 
    ```bash
    cd /lustre/aoc/projects/hera/heramgr
    git clone https://github.com/HERA-Team/librarian_transfer_monitor.git
    ```
 
-2. **Create the environment:**
+2. **Create the environment** (`mamba env list` shows where it went):
 
    ```bash
    cd librarian_transfer_monitor
    mamba env create -f environment.yml
    ```
 
-3. **Run it once by hand** and check the output. The first run also loads the
+3. **Give it the Karoo backup**, if you already have a copy, by moving it into
+   `output/`. Otherwise the first run copies it from the NRAO store disk
+   itself.
+
+   ```bash
+   mkdir -p output
+   mv /path/to/maint.20260904.karoo.librarian.dbbackup.pgdump output/
+   ```
+
+4. **Run it once by hand** and check the output. The first run also loads the
    Karoo backup, so it takes longest.
 
    ```bash
    /lustre/aoc/projects/hera/heramgr/miniforge3/envs/librarian_transfer_monitor/bin/python run_daily.py
    ```
 
-4. **Add it to `heramgr`'s crontab** (`crontab -e`). This runs it at 06:15
+5. **Add it to `heramgr`'s crontab** (`crontab -e`). This runs it at 06:15
    every day, logging to `output/run_daily.log`:
 
    ```
@@ -102,20 +119,17 @@ can't connect at all.
 
 ### Notes
 
-- **Where the SQLite copies go:** they take about 17 GB in `work/`. A local
-  disk may be faster than Lustre, if one has room (`df -h` lists them; don't use
-  the Librarian's own store disks, `/export/hera/herastore*`). To use one, pass
-  `--workdir DIR`. The scripts turn off SQLite's file locking, which some
-  Lustre mounts don't support; `run_daily.py` makes sure only one run uses the
-  directory at a time.
+- **SQLite on Lustre:** the scripts turn off SQLite's file locking, which some
+  Lustre mounts don't support. `run_daily.py` makes sure only one run uses
+  `work/` at a time. If a local disk with ~20 GB free turns out to be faster,
+  pass it as `--workdir`, but don't use the Librarian's own
+  store disks (`/export/hera/herastore*`).
 - **`pg_dump`:** the script uses the server's own `/usr/pgsql-*/bin/pg_dump`
   when it exists, which is known to connect. Pass `--pg-dump` to use another
   one. Pass `--nrao-db` to point it at a database other than the local
   `librarian`; it takes anything `pg_dump -d` accepts.
-- **Karoo backup:** the script reads it straight from the NRAO disk it sits on
-  (for example `/export/hera/herastore03-1/maint/2026.09/`). If those disks
-  aren't mounted where the script runs, copy the backup somewhere readable and
-  pass `--karoo-dump PATH`.
+- **Karoo backup:** to switch to another one, pass `--karoo-dump PATH` once. It
+  is copied into `output/` and replaces the copy there.
 - **Nights worth analyzing:** to change the list, edit `analysis_nights.json`
   (or pass `--night-set FILE`).
 - **Other settings:** the first night (`--min-jd`) and the Karoo's name for its

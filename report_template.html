@@ -120,8 +120,8 @@ table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.data th { position: sticky; top: 0; background: var(--surface); text-align: left; font-weight: 500; color: var(--ink-2);
   padding: 6px 8px; border-bottom: 1px solid var(--axis); white-space: nowrap; cursor: pointer; user-select: none; }
 table.data th.num, table.data td.num { text-align: right; }
-table.data th[aria-sort=ascending]::after { content: " ▲"; font-size: 9px; }
-table.data th[aria-sort=descending]::after { content: " ▼"; font-size: 9px; }
+table.data th[aria-sort=ascending]::after { content: " \25B2"; font-size: 9px; }
+table.data th[aria-sort=descending]::after { content: " \25BC"; font-size: 9px; }
 table.data td { padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; font-variant-numeric: tabular-nums; }
 table.data tbody tr.main { cursor: pointer; }
 table.data tbody tr.main:hover { background: var(--wash); }
@@ -247,11 +247,11 @@ table.data td.disks .more { white-space: nowrap; margin-left: 2px; }
 const D = JSON.parse(document.getElementById("data").textContent);
 const KINDS = D.meta.kinds;
 const STATUS = {
-  complete: { label: "Complete", icon: "✓", color: "var(--good)" },
-  nearly:   { label: "At least 90%", icon: "≈", color: "var(--warning)" },
-  partial:  { label: "Partly transferred", icon: "◐", color: "var(--serious)" },
-  nothing:  { label: "Nothing transferred", icon: "✕", color: "var(--critical)" },
-  nraoonly: { label: "At NRAO, no Karoo record", icon: "•", color: "var(--neutral)" },
+  complete: { label: "Complete", icon: "\u2713", color: "var(--good)" },
+  nearly:   { label: "At least 90%", icon: "\u2248", color: "var(--warning)" },
+  partial:  { label: "Partly transferred", icon: "\u25D0", color: "var(--serious)" },
+  nothing:  { label: "Nothing transferred", icon: "\u2715", color: "var(--critical)" },
+  nraoonly: { label: "At NRAO, no Karoo record", icon: "\u2022", color: "var(--neutral)" },
 };
 const FILE_CODES = { 1: "Not at NRAO", 2: "At NRAO, md5 differs", 3: "NRAO record, no copy on disk" };
 
@@ -275,7 +275,7 @@ const fmtBytes = (b) => {
 };
 const pct = (a, b) => b ? (100 * a / b) : 0;
 const fmtPct = (a, b) => {
-  if (!b) return "–";
+  if (!b) return "\u2013";
   const p = pct(a, b);
   if (p === 100) return "100%";
   if (p === 0) return "0%";
@@ -571,11 +571,11 @@ function renderJDTable(rows) {
       el("td", null, el("strong", { text: String(j.jd) }), el("div", { class: "small", text: j.date }),
         NIGHT_SET && !state.set && NIGHT_SET.has(j.jd) ? el("span", { class: "pill", text: "to analyze", title: D.meta.night_set.label }) : null),
       el("td", null, statusBadge(s.status)),
-      el("td", { class: "num", text: s.total ? fmtPct(s.ok, s.total) : "–" }),
+      el("td", { class: "num", text: s.total ? fmtPct(s.ok, s.total) : "\u2013" }),
     );
     for (const i of selKinds()) {
       const kk = kArr(j, i), no = noCount(j, i);
-      tr.append(el("td", { class: "num", text: kk[0] ? fmt(kk[1]) + " / " + fmt(kk[0]) : (no ? fmt(no) + " at NRAO only" : "–") }));
+      tr.append(el("td", { class: "num", text: kk[0] ? fmt(kk[1]) + " / " + fmt(kk[0]) : (no ? fmt(no) + " at NRAO only" : "\u2013") }));
     }
     tr.append(el("td", { class: "num", text: s.notok ? fmt(s.notok) : "0" }), el("td", { class: "num", text: fmtBytes(s.bnot) }),
       el("td", { class: "disks" }, diskList(j.kd, kName, setKdisk, 3)), el("td", { class: "disks" }, diskList(j.nd, nName, setNdisk, 3)));
@@ -663,14 +663,14 @@ function renderKdisks() {
     const p = pct(r.ok, r.files);
     const tr = el("tr", { class: "main" + (state.kdisk === r.idx ? " sel" : ""), tabindex: "0" });
     const gaps = el("td", { class: "disks" });
-    if (!r.gaps.length) gaps.append(el("span", { class: "st st-complete" }, el("i", { "aria-hidden": "true", text: "✓" }), "none"));
+    if (!r.gaps.length) gaps.append(el("span", { class: "st st-complete" }, el("i", { "aria-hidden": "true", text: "\u2713" }), "none"));
     r.gaps.sort((a, b) => a - b).slice(0, 40).forEach((jd) => {
       const pill = el("span", { class: "pill", text: String(jd), style: "cursor:pointer" });
       pill.addEventListener("click", (e) => { e.stopPropagation(); openJD(jd); });
       gaps.append(pill);
     });
     if (r.gaps.length > 40) gaps.append(el("span", { class: "small", text: " + " + (r.gaps.length - 40) + " more" }));
-    const jr = r.jds.length ? Math.min(...r.jds) + "–" + Math.max(...r.jds) : "";
+    const jr = r.jds.length ? Math.min(...r.jds) + "\u2013" + Math.max(...r.jds) : "";
     tr.append(
       el("td", null, el("strong", { text: r.name }), s.available === false ? el("div", { class: "small", text: "marked unavailable" }) : null),
       el("td", { class: "small mono", text: s.host + ":" + s.prefix }),
@@ -720,7 +720,7 @@ function renderNdisks() {
     tr.append(el("td", null, el("strong", { text: r.name }), s.available === false ? el("div", { class: "small", text: "marked unavailable" }) : null),
       el("td", { class: "small mono", text: s.host + ":" + s.prefix }),
       el("td", { class: "num", text: fmt(r.files) }), el("td", { class: "num", text: fmtBytes(r.bytes) }),
-      el("td", { class: "num", text: fmt(r.jds.length) }), el("td", { text: Math.min(...r.jds) + "–" + Math.max(...r.jds) }));
+      el("td", { class: "num", text: fmt(r.jds.length) }), el("td", { text: Math.min(...r.jds) + "\u2013" + Math.max(...r.jds) }));
     tr.addEventListener("click", () => setNdisk(r.idx));
     tr.addEventListener("keydown", (e) => { if (e.key === "Enter") setNdisk(r.idx); });
     body.append(tr);
@@ -975,7 +975,7 @@ function renderIncoming(rows) {
       el("span", { text: value }));
     const kids = [el("div", { class: "tv", text: weekly ? "Week of " + isoDay(b.s) : isoDay(b.s) })];
     for (const s of series) kids.push(row(s.label, fv(b[s.key][m]), s.color));
-    b.parts.forEach((p, k) => { if (p[m]) kids.push(row("  · " + OTHER_PARTS[k], fv(p[m]))); });
+    b.parts.forEach((p, k) => { if (p[m]) kids.push(row("  \u00B7 " + OTHER_PARTS[k], fv(p[m]))); });
     const nw = b.care[m] + b.other[m];
     kids.push(el("div", { class: "small", text: "Files we care about: " + fmtPct(b.care[m], nw) + " of new files" }));
     tip.replaceChildren(...kids);

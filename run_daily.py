@@ -7,10 +7,11 @@ Each run:
      complete, so backups don't pile up.
   2. Loads from that backup the tables the report needs (files, copies, disks, and
      the events that record each copy's arrival) into WORKDIR/nrao.sqlite.
-  3. Finds the newest Karoo Librarian backup the NRAO Librarian holds
-     (maint.YYYYMMDD.karoo.librarian.dbbackup.pgdump) that is readable on this
-     machine, and loads it into WORKDIR/karoo/. That takes ~10 minutes and ~12 GB,
-     so it happens only when a new backup arrives; other days reuse the loaded copy.
+  3. Uses the Karoo Librarian backup kept in output/
+     (maint.YYYYMMDD.karoo.librarian.dbbackup.pgdump). The first run copies there
+     the newest one the NRAO Librarian holds; later runs copy again only if NRAO
+     lists a newer one (data taking is over). Loads it into WORKDIR/karoo/, which
+     takes ~10 minutes and ~12 GB, so only when the backup changes.
   4. Builds the report, an HTML page and a CSV of every file not at NRAO, and
      puts both in output/.
   5. Copies both into the web directory.
@@ -18,7 +19,7 @@ Every file is replaced only once its new version is complete, so a failed run
 leaves the previous backup and page in place (and exits non-zero).
 
 output/ and work/ (the default WORKDIR) are inside this repository and ignored
-by git. WORKDIR needs ~20 GB; pass --workdir to put it on a local disk. Run as a
+by git. WORKDIR needs ~20 GB and output/ ~5 GB; --workdir and --output-dir move them. Run as a
 user that can read the database without a password (heramgr on herastore01).
 
 Example crontab line (06:15 every day):
@@ -104,29 +105,61 @@ def karoo_backups(nrao_db):
     return list(out.items())
 
 
-def pick_karoo_dump(args, nrao_db):
-    """Path of the Karoo backup to use, or None to fall back on the newest copy already loaded."""
-    if args.karoo_dump:
-        if not os.access(args.karoo_dump, os.R_OK):
-            sys.exit(f"cannot read {args.karoo_dump}")
-        return args.karoo_dump
-    backups = karoo_backups(nrao_db)
-    if not backups:
-        say(f"warning: the NRAO Librarian has no file named like {KAROO_BACKUP_PATTERN}")
-        return None
+def newest_readable(backups):
+    """Path of the newest of the Karoo backups [(name, [paths])] that is readable here, or None."""
     for i, (name, paths) in enumerate(backups):
         readable = [p for p in paths if os.path.isfile(p) and os.access(p, os.R_OK)]
         if readable:
             if i:
                 say(f"warning: the {i} newest Karoo backup(s) are not readable here (e.g. {backups[0][1][0]}); using {name}")
             return readable[0]
-    say(f"warning: none of the Karoo backups NRAO holds is readable here (newest: {', '.join(backups[0][1])})")
+    if backups:
+        say(f"warning: none of the Karoo backups NRAO holds is readable here (newest: {', '.join(backups[0][1])})")
     return None
 
 
-def karoo_db_for(args, nrao_db, cache_dir):
+def pick_karoo_dump(args, nrao_db, output_dir):
+    """Path of the Karoo backup to use, kept in output_dir; None to fall back on the copy loaded earlier.
+
+    Data taking is over, so the Karoo backup rarely changes: it is copied into output_dir once and used from
+    there. It is copied again only if --karoo-dump names a different one or the NRAO Librarian lists a newer
+    one, and the older copy is then deleted.
+    """
+    local = sorted(glob.glob(os.path.join(output_dir, KAROO_BACKUP_PATTERN.replace("%", "*"))))
+    have = local[-1] if local else None
+    if args.karoo_dump:
+        if not os.access(args.karoo_dump, os.R_OK):
+            sys.exit(f"cannot read {args.karoo_dump}")
+        src = args.karoo_dump
+        if have and os.path.basename(src) == os.path.basename(have):
+            return have
+    else:
+        backups = karoo_backups(nrao_db)
+        if not backups:
+            say(f"warning: the NRAO Librarian has no file named like {KAROO_BACKUP_PATTERN}")
+        if have and (not backups or backups[0][0] <= os.path.basename(have)):
+            return have  # nothing newer at NRAO
+        src = newest_readable(backups)
+        if src is None or (have and os.path.basename(src) <= os.path.basename(have)):
+            return have
+
+    size = os.path.getsize(src)
+    free = shutil.disk_usage(output_dir).free
+    if free < 1.2 * size:
+        sys.exit(f"only {free / 1e9:.1f} GB free in {output_dir}; copying {src} needs {size / 1e9:.1f} GB")
+    say(f"copying the Karoo backup {src} into {output_dir} ({size / 1e9:.1f} GB)")
+    name = os.path.basename(src)
+    install(src, output_dir, name)
+    for old in local:
+        if os.path.basename(old) != name:
+            say(f"removing the older Karoo backup {old}")
+            os.remove(old)
+    return os.path.join(output_dir, name)
+
+
+def karoo_db_for(args, nrao_db, cache_dir, output_dir):
     """Load (if needed) and return (sqlite path, backup name) for the Karoo side."""
-    dump = pick_karoo_dump(args, nrao_db)
+    dump = pick_karoo_dump(args, nrao_db, output_dir)
     cached = sorted(glob.glob(os.path.join(cache_dir, "*.sqlite")))
     if dump is None:
         if not cached:
@@ -180,7 +213,8 @@ def main():
                         "(default: %(default)s)")
     p.add_argument("--nrao-dump", help="read the NRAO Librarian from this existing pg_dump file instead of backing up "
                                        "the live database (for testing)")
-    p.add_argument("--karoo-dump", help="use this Karoo Librarian backup instead of the newest one NRAO holds")
+    p.add_argument("--karoo-dump", help="use this Karoo Librarian backup (copied into the output directory) instead of "
+                                        "the newest one NRAO holds")
     p.add_argument("--pg-dump", help="pg_dump to use (default: /usr/pgsql-*/bin/pg_dump if present, else the environment's)")
     p.add_argument("--pg-restore", help="pg_restore to use (default: the environment's)")
     p.add_argument("--connection", action="append", help="Karoo connection name(s) that mean NRAO (default: aoc-uploads)")
@@ -212,12 +246,12 @@ def main():
         nrao_source = f"the NRAO Librarian database on {socket.gethostname()}"
     nrao_db = os.path.join(workdir, "nrao.sqlite")
     load_nrao(args, nrao_dump, nrao_db)
-    karoo_db, karoo_name = karoo_db_for(args, nrao_db, cache_dir)
+    karoo_db, karoo_name = karoo_db_for(args, nrao_db, cache_dir, output_dir)
 
     say("building the report")
     html, csv_path = os.path.join(build_dir, HTML_NAME), os.path.join(build_dir, CSV_NAME)
     work = os.path.join(workdir, "report_work.sqlite")
-    note = f"Sources: {nrao_source}, and the Karoo Librarian backup {karoo_name} (the newest one that has reached NRAO)."
+    note = f"Sources: {nrao_source}, and the Karoo Librarian backup {karoo_name}."
     try:
         data = report.write_report(karoo_db, nrao_db, work, html, csv_path, connections=args.connection or ["aoc-uploads"],
                                    min_jd=args.min_jd, night_set=args.night_set, night_set_label=args.night_set_label,

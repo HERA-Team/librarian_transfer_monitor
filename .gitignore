@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# Made by run_daily.py: the daily NRAO backup, the latest page and CSV, the cron log (output/),
+# and the SQLite copies of both Librarians (work/).
+/output/*
+!/output/.gitkeep
+/work/

@@ -1,0 +1,13 @@
+# mamba env create -f environment.yml
+#
+# Python with SQLite (JSON1 included), plus the PostgreSQL client programs:
+# pg_restore reads the Karoo Librarian backups, and pg_dump can read the live
+# NRAO Librarian database (run_daily.py prefers the server's own pg_dump when
+# /usr/pgsql-*/bin/pg_dump exists). The PostgreSQL server in this package is
+# never started.
+name: librarian_transfer_monitor
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - postgresql>=16

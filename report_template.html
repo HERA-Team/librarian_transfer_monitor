@@ -1,0 +1,1021 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Karoo to NRAO transfers</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10); --wash: rgba(11,11,11,0.04);
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --neutral: #898781; --empty: #f0efec; --accent: #2a78d6; --track: #cde2fb; --good-text: #006300;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10); --wash: rgba(255,255,255,0.05);
+    --neutral: #898781; --empty: #262624; --accent: #3987e5; --track: #0d366b; --good-text: #0ca30c;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10); --wash: rgba(255,255,255,0.05);
+  --neutral: #898781; --empty: #262624; --accent: #3987e5; --track: #0d366b; --good-text: #0ca30c;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1280px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 22px; margin: 0 0 4px; font-weight: 600; }
+h2 { font-size: 16px; margin: 0; font-weight: 600; }
+.sub { color: var(--ink-2); margin: 0; }
+.small { font-size: 12px; color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 16px; margin-top: 16px; }
+.card-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.notes { margin: 8px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 13px; }
+.notes li { margin: 2px 0; }
+
+/* filter row */
+.filters { position: sticky; top: 0; z-index: 5; background: var(--page); padding: 10px 0; margin-top: 12px;
+  display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; border-bottom: 1px solid var(--grid); }
+.filters label { font-size: 12px; color: var(--ink-2); display: inline-flex; gap: 6px; align-items: center; }
+[hidden] { display: none !important; }
+/* page-wide switch: limits every section to the listed nights */
+.filters label.toggle { font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; gap: 8px;
+  padding-right: 14px; border-right: 1px solid var(--axis); }
+.toggle input { appearance: none; -webkit-appearance: none; width: 34px; height: 20px; margin: 0; border-radius: 999px;
+  background: var(--axis); position: relative; cursor: pointer; transition: background .15s; flex: none; }
+.toggle input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--surface); transition: left .15s; }
+.toggle input:checked { background: var(--ink); }
+.toggle input:checked::after { left: 16px; }
+.toggle input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.filters select, .filters input[type=text], .filters input[type=number] {
+  font: inherit; font-size: 13px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--axis); border-radius: 6px; padding: 4px 6px; }
+.filters input[type=number] { width: 96px; }
+.filters input[type=text] { width: 150px; }
+.chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.chip { font: inherit; font-size: 12px; border: 1px solid var(--axis); background: var(--surface); color: var(--ink-2);
+  border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.chip[aria-pressed=true] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+button.link { font: inherit; font-size: 12px; background: none; border: none; color: var(--accent); cursor: pointer; padding: 2px 4px; }
+
+/* KPI tiles */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+.tile { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 14px 16px; }
+.tile .label { font-size: 12px; color: var(--ink-2); }
+.tile .value { font-size: 28px; font-weight: 600; margin-top: 2px; }
+.tile .detail { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.kind-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+.kind-table th, .kind-table td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+.kind-table th:first-child, .kind-table td:first-child { text-align: left; }
+.kind-table th { color: var(--ink-2); font-weight: 500; }
+
+/* legend & status */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.st { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.st i { font-style: normal; width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center;
+  font-size: 10px; font-weight: 700; color: #fff; }
+.st-complete i { background: var(--good); }
+.st-nearly i { background: var(--warning); color: #0b0b0b; }
+.st-partial i { background: var(--serious); }
+.st-nothing i { background: var(--critical); }
+.st-nraoonly i { background: var(--neutral); }
+
+/* strip chart */
+#strip { position: relative; width: 100%; }
+#strip svg { display: block; width: 100%; }
+.tooltip { position: fixed; pointer-events: none; z-index: 20; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--ring); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  padding: 8px 10px; font-size: 12px; min-width: 180px; display: none; }
+.tooltip .tv { font-size: 14px; font-weight: 600; }
+.tooltip .tl { color: var(--ink-2); }
+.tooltip .row { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
+
+/* catch-up chart */
+#catchup { position: relative; width: 100%; }
+#catchup svg { display: block; width: 100%; touch-action: pan-y; }
+.line-sw { width: 16px; height: 0; border-top: 2px solid; display: inline-block; border-radius: 2px; }
+.catchup-sum { margin: 0 0 8px; color: var(--ink-2); }
+details.table-view { margin-top: 8px; }
+details.table-view summary { cursor: pointer; font-size: 12px; color: var(--accent); }
+details.table-view table { margin-top: 6px; }
+#incoming { position: relative; width: 100%; }
+#incoming svg { display: block; width: 100%; touch-action: pan-y; }
+.incoming-controls { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 0 0 8px; }
+
+/* tables */
+.scroll { overflow-x: auto; }
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data th { position: sticky; top: 0; background: var(--surface); text-align: left; font-weight: 500; color: var(--ink-2);
+  padding: 6px 8px; border-bottom: 1px solid var(--axis); white-space: nowrap; cursor: pointer; user-select: none; }
+table.data th.num, table.data td.num { text-align: right; }
+table.data th[aria-sort=ascending]::after { content: " ▲"; font-size: 9px; }
+table.data th[aria-sort=descending]::after { content: " ▼"; font-size: 9px; }
+table.data td { padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; font-variant-numeric: tabular-nums; }
+table.data tbody tr.main { cursor: pointer; }
+table.data tbody tr.main:hover { background: var(--wash); }
+table.data tbody tr.sel { background: var(--wash); }
+table.data td.disks { color: var(--ink-2); min-width: 210px; max-width: 280px; }
+table.data td.disks .more { white-space: nowrap; margin-left: 2px; }
+.detail-cell { background: var(--page); }
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 24px; padding: 4px 0 8px; }
+.detail-grid h3 { font-size: 12px; font-weight: 600; margin: 0 0 4px; color: var(--ink-2); }
+.detail-grid > * { min-width: 0; }
+.detail-grid > .full { grid-column: 1 / -1; }
+.problem-list { max-height: 360px; overflow: auto; border: 1px solid var(--grid); border-radius: 6px; }
+.files { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+.files td, .files th { padding: 3px 6px; border-bottom: 1px solid var(--grid); text-align: left; }
+.files th { color: var(--ink-2); font-weight: 500; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.meter { position: relative; width: 120px; height: 8px; border-radius: 4px; background: var(--track); display: inline-block; vertical-align: middle; }
+.meter > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--accent); }
+.empty { color: var(--muted); padding: 16px 0; text-align: center; }
+.pill { display: inline-block; font-size: 11px; border: 1px solid var(--axis); border-radius: 999px; padding: 0 6px; margin: 1px 2px 1px 0; color: var(--ink-2); }
+.toggle-row { display: flex; gap: 8px; align-items: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Karoo to NRAO transfers</h1>
+  <p class="sub" id="subtitle"></p>
+  <ul class="notes" id="notes"></ul>
+
+  <div class="filters" role="group" aria-label="Filters">
+    <label class="toggle" id="f-set-label" hidden><input type="checkbox" role="switch" id="f-set">
+      <span id="f-set-text">Only nights worth analyzing</span></label>
+    <label>Files <span class="chips" id="kind-chips"></span></label>
+    <label>Status
+      <select id="f-status">
+        <option value="">All</option>
+        <option value="complete">Complete</option>
+        <option value="incomplete">Not complete</option>
+        <option value="nearly">At least 90%</option>
+        <option value="partial">Partly transferred</option>
+        <option value="nothing">Nothing transferred</option>
+        <option value="nraoonly">At NRAO, no Karoo record</option>
+      </select></label>
+    <label>JD from <input type="number" id="f-jd0" step="1"></label>
+    <label>to <input type="number" id="f-jd1" step="1"></label>
+    <label>Karoo disk <select id="f-kdisk"><option value="">Any</option></select></label>
+    <label>NRAO disk <select id="f-ndisk"><option value="">Any</option></select></label>
+    <label>Find <input type="text" id="f-text" placeholder="JD or date"></label>
+    <button class="link" id="f-reset">Reset</button>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Transfer status by night</h2>
+      <div class="legend" id="strip-legend"></div>
+    </div>
+    <div id="strip"></div>
+    <p class="small">Each mark is one observing night (JD), placed by its date. Hover for counts; click to jump to that night in the table.</p>
+  </section>
+
+  <section class="card" id="catchup-card">
+    <div class="card-head">
+      <h2>Catching up since data taking ended</h2>
+      <div class="legend">
+        <span><span class="line-sw" style="border-color: var(--series-1)"></span>Files</span>
+        <span><span class="line-sw" style="border-color: var(--series-1); border-top-style: dashed"></span>Data volume</span>
+      </div>
+    </div>
+    <p class="catchup-sum" id="catchup-summary"></p>
+    <div id="catchup"></div>
+    <p class="small" id="catchup-note"></p>
+    <p class="small" id="catchup-scope" hidden>This chart counts every file of the nights shown, not just those on the selected disk.</p>
+    <details class="table-view"><summary>Show as a weekly table</summary><div class="scroll"><table class="data" id="catchup-table"></table></div></details>
+  </section>
+
+  <section class="card" id="incoming-card">
+    <div class="card-head">
+      <h2>What's arriving at NRAO: the files we care about vs everything</h2>
+      <div class="legend" id="incoming-legend"></div>
+    </div>
+    <p class="catchup-sum" id="incoming-summary"></p>
+    <div class="incoming-controls">
+      <span class="small">Show</span>
+      <span class="chips" id="incoming-metric"></span>
+      <span class="chips"><button class="chip" id="incoming-copies" aria-pressed="true">Include extra copies</button></span>
+    </div>
+    <div id="incoming"></div>
+    <p class="small" id="incoming-note"></p>
+    <details class="table-view"><summary>Show as a weekly table</summary><div class="scroll"><table class="data" id="incoming-table"></table></div></details>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Nights</h2>
+      <span class="small" id="jd-count"></span>
+    </div>
+    <div class="scroll"><table class="data" id="jd-table"></table></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Karoo disks: how much of each is at NRAO</h2>
+      <span class="small">As of the Karoo backup. Click a disk to filter everything to its nights.</span>
+    </div>
+    <div class="scroll"><table class="data" id="kdisk-table"></table></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>NRAO disks</h2>
+      <span class="small">Click a disk to filter everything to its nights.</span>
+    </div>
+    <div class="scroll"><table class="data" id="ndisk-table"></table></div>
+  </section>
+</main>
+<div class="tooltip" id="tip" role="status"></div>
+
+<script type="application/json" id="data">/*__DATA__*/</script>
+<script>
+"use strict";
+const D = JSON.parse(document.getElementById("data").textContent);
+const KINDS = D.meta.kinds;
+const STATUS = {
+  complete: { label: "Complete", icon: "✓", color: "var(--good)" },
+  nearly:   { label: "At least 90%", icon: "≈", color: "var(--warning)" },
+  partial:  { label: "Partly transferred", icon: "◐", color: "var(--serious)" },
+  nothing:  { label: "Nothing transferred", icon: "✕", color: "var(--critical)" },
+  nraoonly: { label: "At NRAO, no Karoo record", icon: "•", color: "var(--neutral)" },
+};
+const FILE_CODES = { 1: "Not at NRAO", 2: "At NRAO, md5 differs", 3: "NRAO record, no copy on disk" };
+
+// ---------------------------------------------------------------- helpers
+const $ = (id) => document.getElementById(id);
+const el = (tag, attrs, ...kids) => {
+  const e = document.createElement(tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+  return e;
+};
+const fmt = (n) => Number(n).toLocaleString("en-US");
+const fmtBytes = (b) => {
+  if (!b) return "0";
+  const u = [["PB", 1e15], ["TB", 1e12], ["GB", 1e9], ["MB", 1e6], ["kB", 1e3]];
+  for (const [s, f] of u) if (b >= f) return (b / f).toFixed(b / f < 10 ? 2 : 1) + " " + s;
+  return b + " B";
+};
+const pct = (a, b) => b ? (100 * a / b) : 0;
+const fmtPct = (a, b) => {
+  if (!b) return "–";
+  const p = pct(a, b);
+  if (p === 100) return "100%";
+  if (p === 0) return "0%";
+  if (p > 99.9) return ">99.9%";
+  if (p < 0.1 && p > 0) return "<0.1%";
+  return p.toFixed(p >= 10 ? 1 : 2) + "%";
+};
+const statusBadge = (s) => el("span", { class: "st st-" + s }, el("i", { "aria-hidden": "true", text: STATUS[s].icon }), STATUS[s].label);
+const kName = (i) => D.kstores[i].name;
+const nName = (i) => D.nstores[i].name;
+
+// ---------------------------------------------------------------- state
+// Optional named list of nights (e.g. the ones worth analyzing), from the builder's --night-set. When the switch
+// is on, every section of the page (numbers, chart, tables, JD range) covers only those nights.
+const NIGHT_SET = D.meta.night_set ? new Set(D.meta.night_set.jds) : null;
+const inSet = (jd) => !state.set || NIGHT_SET.has(jd);
+const state = { set: false, kinds: KINDS.map(() => true), status: "", jd0: null, jd1: null, kdisk: "", ndisk: "", text: "",
+  sort: { key: "jd", dir: -1 }, open: new Set(), ksort: { key: "name", dir: 1 }, nsort: { key: "name", dir: 1 } };
+const selKinds = () => KINDS.map((_, i) => i).filter((i) => state.kinds[i]);
+
+// per-JD stats over the selected kinds. k[i] = [total, ok, missing, mismatch, noinst, bytes, bytes_notok, missing_nokaroo]
+// With a Karoo disk selected, every count covers only the files on that disk.
+const ZERO8 = [0, 0, 0, 0, 0, 0, 0, 0];
+function kArr(j, i) {
+  if (state.kdisk === "") return j.k[i];
+  const d = D.kdisk[state.kdisk].jds[j.jd];
+  return d ? d[i] : ZERO8;
+}
+const noCount = (j, i) => state.kdisk === "" ? j.no[i] : 0;
+const kdiskName = () => state.kdisk === "" ? "" : D.kstores[state.kdisk].name;
+function jdStats(j) {
+  const s = { total: 0, ok: 0, missing: 0, mismatch: 0, noinst: 0, bytes: 0, bnot: 0, lost: 0, nraoOnly: 0, perKind: {} };
+  for (const i of selKinds()) {
+    const k = kArr(j, i);
+    s.total += k[0]; s.ok += k[1]; s.missing += k[2]; s.mismatch += k[3]; s.noinst += k[4];
+    s.bytes += k[5]; s.bnot += k[6]; s.lost += k[7]; s.nraoOnly += noCount(j, i);
+    s.perKind[i] = k;
+  }
+  s.notok = s.total - s.ok;
+  if (s.total === 0) s.status = s.nraoOnly > 0 ? "nraoonly" : null;
+  else if (s.ok === s.total) s.status = "complete";
+  else if (s.ok / s.total >= 0.9) s.status = "nearly";
+  else if (s.ok > 0) s.status = "partial";
+  else s.status = "nothing";
+  return s;
+}
+const diskCount = (map, idx) => { // files of the selected kinds on a disk for one JD
+  const a = map[idx]; if (!a) return 0;
+  return selKinds().reduce((t, i) => t + a[i], 0);
+};
+
+function filteredJDs() {
+  const out = [];
+  const txt = state.text.trim();
+  for (const j of D.jds) {
+    const s = jdStats(j);
+    if (!s.status) continue;
+    if (state.status) {
+      if (state.status === "incomplete") { if (s.status === "complete" || s.status === "nraoonly") continue; }
+      else if (s.status !== state.status) continue;
+    }
+    if (!inSet(j.jd)) continue;
+    if (state.jd0 != null && j.jd < state.jd0) continue;
+    if (state.jd1 != null && j.jd > state.jd1) continue;
+    if (state.kdisk !== "" && !diskCount(j.kd, state.kdisk)) continue;
+    if (state.ndisk !== "" && !diskCount(j.nd, state.ndisk)) continue;
+    if (txt && !(String(j.jd).includes(txt) || j.date.includes(txt))) continue;
+    out.push({ j, s });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- header & filters
+function initHeader() {
+  const m = D.meta;
+  $("subtitle").append("Per-night transfer status of " + KINDS.map((k) => k.label).join(", ") +
+    " files, comparing the Karoo Librarian (backup of " + m.karoo_asof + ") with the NRAO Librarian (as of " + m.nrao_asof +
+    "). Page updated " + m.generated + ". Every file not at NRAO is listed in ",
+    el("a", { href: m.problems_csv, text: m.problems_csv }), ".");
+  for (const n of m.notes) $("notes").append(el("li", { text: n }));
+  KINDS.forEach((k, i) => {
+    const b = el("button", { class: "chip", "aria-pressed": "true", text: k.label, title: k.desc || k.label });
+    b.addEventListener("click", () => {
+      if (state.kinds[i] && selKinds().length === 1) return; // keep at least one
+      state.kinds[i] = !state.kinds[i]; b.setAttribute("aria-pressed", String(state.kinds[i])); render();
+    });
+    $("kind-chips").append(b);
+  });
+  D.kstores.forEach((s, i) => { if (D.kdisk[i] && D.kdisk[i].any) $("f-kdisk").append(el("option", { value: String(i), text: s.name })); });
+  D.nstores.forEach((s, i) => { if (D.ndisk[i] && D.ndisk[i].any) $("f-ndisk").append(el("option", { value: String(i), text: s.name })); });
+  // The JD inputs start filled with the full range of nights shown; a cleared input goes back to its end of the range.
+  $("f-jd0").min = $("f-jd1").min = JD_MIN; $("f-jd0").max = $("f-jd1").max = JD_MAX;
+  if (NIGHT_SET) {
+    $("f-set-label").hidden = false;
+    $("f-set-text").textContent = "Only nights " + D.meta.night_set.label.toLowerCase() + " (" + fmt(NIGHT_SET.size) + ")";
+    $("f-set").addEventListener("change", (e) => { state.set = e.target.checked; state.open.clear(); fillJDRange(); render(); });
+  }
+  const num = (v) => v === "" ? null : Number(v);
+  $("f-status").addEventListener("change", (e) => { state.status = e.target.value; render(); });
+  $("f-jd0").addEventListener("change", (e) => { const v = num(e.target.value); state.jd0 = v === jdLo() ? null : v; fillJDRange(); render(); });
+  $("f-jd1").addEventListener("change", (e) => { const v = num(e.target.value); state.jd1 = v === jdHi() ? null : v; fillJDRange(); render(); });
+  fillJDRange();
+  $("f-kdisk").addEventListener("change", (e) => { state.kdisk = e.target.value === "" ? "" : Number(e.target.value); render(); });
+  $("f-ndisk").addEventListener("change", (e) => { state.ndisk = e.target.value === "" ? "" : Number(e.target.value); render(); });
+  $("f-text").addEventListener("input", (e) => { state.text = e.target.value; render(); });
+  $("f-reset").addEventListener("click", () => {
+    // Reset clears the filters but leaves the page-wide night switch as it is.
+    Object.assign(state, { kinds: KINDS.map(() => true), status: "", jd0: null, jd1: null, kdisk: "", ndisk: "", text: "" });
+    state.open.clear();
+    document.querySelectorAll("#kind-chips .chip").forEach((b) => b.setAttribute("aria-pressed", "true"));
+    ["f-status", "f-kdisk", "f-ndisk", "f-text"].forEach((id) => { $(id).value = ""; });
+    fillJDRange();
+    render();
+  });
+  for (const key of Object.keys(STATUS)) {
+    $("strip-legend").append(el("span", null, el("span", { class: "sw", style: "background:" + STATUS[key].color }), STATUS[key].label));
+  }
+}
+const JD_MIN = D.jds.reduce((m, j) => Math.min(m, j.jd), Infinity);
+const JD_MAX = D.jds.reduce((m, j) => Math.max(m, j.jd), -Infinity);
+const SET_JDS = NIGHT_SET ? D.jds.map((j) => j.jd).filter((jd) => NIGHT_SET.has(jd)) : [];
+const jdLo = () => state.set && SET_JDS.length ? Math.min(...SET_JDS) : JD_MIN;  // widest range of the nights shown
+const jdHi = () => state.set && SET_JDS.length ? Math.max(...SET_JDS) : JD_MAX;
+function fillJDRange() {
+  $("f-jd0").value = String(state.jd0 ?? jdLo()); $("f-jd0").placeholder = String(jdLo());
+  $("f-jd1").value = String(state.jd1 ?? jdHi()); $("f-jd1").placeholder = String(jdHi());
+}
+function setKdisk(i) { state.kdisk = state.kdisk === i ? "" : i; $("f-kdisk").value = state.kdisk === "" ? "" : String(i); render(); }
+function setNdisk(i) { state.ndisk = state.ndisk === i ? "" : i; $("f-ndisk").value = state.ndisk === "" ? "" : String(i); render(); }
+
+// ---------------------------------------------------------------- KPIs
+function renderKPIs(rows) {
+  const t = { total: 0, ok: 0, bytes: 0, bnot: 0, lost: 0, complete: 0, nights: 0 };
+  const perKind = KINDS.map(() => [0, 0, 0, 0, 0, 0, 0, 0]);
+  for (const { j, s } of rows) {
+    if (s.status === "nraoonly") continue;
+    t.nights++; if (s.status === "complete") t.complete++;
+    t.total += s.total; t.ok += s.ok; t.bytes += s.bytes; t.bnot += s.bnot; t.lost += s.lost;
+    for (const i of selKinds()) kArr(j, i).forEach((v, x) => { perKind[i][x] += v; });
+  }
+  const tile = (label, value, detail) => el("div", { class: "tile" },
+    el("div", { class: "label", text: label }), el("div", { class: "value", text: value }), el("div", { class: "detail", text: detail }));
+  const box = $("kpis"); box.replaceChildren(
+    tile("Files at NRAO", fmtPct(t.ok, t.total), fmt(t.ok) + " of " + fmt(t.total) + " files" + (state.kdisk === "" ? "" : " on " + kdiskName())),
+    tile("Files not at NRAO", fmt(t.total - t.ok), fmtBytes(t.bnot) + " of data"),
+    tile("Not at NRAO and not on any Karoo disk", fmt(t.lost), "as of the Karoo backup"),
+    tile("Nights fully transferred", fmt(t.complete) + " of " + fmt(t.nights), fmtPct(t.complete, t.nights) + " of nights shown"),
+  );
+  const tbl = el("table", { class: "kind-table" });
+  tbl.append(el("thead", null, el("tr", null, ...["File kind", "At Karoo", "At NRAO", "Not at NRAO", "md5 differs", "No NRAO copy on disk", "Data not at NRAO"].map((h) => el("th", { text: h })))));
+  const tb = el("tbody");
+  for (const i of selKinds()) {
+    const k = perKind[i];
+    tb.append(el("tr", null, el("td", { text: KINDS[i].label }), el("td", { text: fmt(k[0]) }),
+      el("td", { text: fmt(k[1]) + " (" + fmtPct(k[1], k[0]) + ")" }), el("td", { text: fmt(k[2]) }),
+      el("td", { text: fmt(k[3]) }), el("td", { text: fmt(k[4]) }), el("td", { text: fmtBytes(k[6]) })));
+  }
+  tbl.append(tb);
+  box.append(el("div", { class: "tile", style: "grid-column: 1 / -1" }, tbl));
+}
+
+// ---------------------------------------------------------------- strip chart
+const NS = "http://www.w3.org/2000/svg";
+const svgEl = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); return e; };
+let stripIndex = null;
+function renderStrip(rows) {
+  const host = $("strip");
+  const W = Math.max(320, host.clientWidth);
+  const years = [...new Set(D.jds.map((j) => +j.date.slice(0, 4)))].sort();
+  const left = 44, top = 20, rowH = 18, gap = 6, right = 4;
+  const H = top + years.length * (rowH + gap);
+  const plotW = W - left - right;
+  const dayW = plotW / 366;
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": "Transfer status by night, one row per year" });
+  // month ticks
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  months.forEach((m, i) => {
+    const doy = Math.round((Date.UTC(2001, i, 1) - Date.UTC(2001, 0, 1)) / 864e5);
+    const x = left + doy * dayW;
+    svg.append(svgEl("line", { x1: x, x2: x, y1: top - 4, y2: H - gap, stroke: "var(--grid)", "stroke-width": 1 }));
+    const t = svgEl("text", { x: x + 3, y: 12, fill: "var(--muted)", "font-size": 11 }); t.textContent = m; svg.append(t);
+  });
+  const visible = new Set(rows.map((r) => r.j.jd));
+  const statusOf = new Map(rows.map((r) => [r.j.jd, r.s]));
+  stripIndex = new Map();
+  years.forEach((y, yi) => {
+    const y0 = top + yi * (rowH + gap);
+    const lab = svgEl("text", { x: 0, y: y0 + rowH - 5, fill: "var(--ink-2)", "font-size": 12 }); lab.textContent = y; svg.append(lab);
+    svg.append(svgEl("rect", { x: left, y: y0, width: plotW, height: rowH, fill: "var(--empty)", rx: 2 }));
+  });
+  for (const j of D.jds) {
+    const y = +j.date.slice(0, 4), yi = years.indexOf(y);
+    const doy = Math.round((Date.UTC(y, +j.date.slice(5, 7) - 1, +j.date.slice(8, 10)) - Date.UTC(y, 0, 1)) / 864e5);
+    stripIndex.set(yi + ":" + doy, j);
+    if (!visible.has(j.jd)) continue;
+    const s = statusOf.get(j.jd);
+    svg.append(svgEl("rect", { x: left + doy * dayW, y: top + yi * (rowH + gap), width: Math.max(1, dayW - (dayW > 3 ? 0.5 : 0)), height: rowH,
+      fill: STATUS[s.status].color }));
+  }
+  const hover = svgEl("rect", { fill: "none", stroke: "var(--ink)", "stroke-width": 1.5, rx: 1, visibility: "hidden" });
+  svg.append(hover);
+  const tip = $("tip");
+  const locate = (ev) => {
+    const r = svg.getBoundingClientRect();
+    const x = (ev.clientX - r.left) * (W / r.width), y = (ev.clientY - r.top) * (H / r.height);
+    const yi = Math.floor((y - top) / (rowH + gap));
+    if (yi < 0 || yi >= years.length || x < left) return null;
+    const doy = Math.floor((x - left) / dayW);
+    for (const d of [0, -1, 1, -2, 2]) { // snap to the nearest night within a couple of days
+      const j = stripIndex.get(yi + ":" + (doy + d));
+      if (j && visible.has(j.jd)) return { j, yi, doy: doy + d };
+    }
+    return null;
+  };
+  svg.addEventListener("pointermove", (ev) => {
+    const hit = locate(ev);
+    if (!hit) { hover.setAttribute("visibility", "hidden"); tip.style.display = "none"; svg.style.cursor = ""; return; }
+    const s = statusOf.get(hit.j.jd);
+    hover.setAttribute("x", left + hit.doy * dayW - 1); hover.setAttribute("y", top + hit.yi * (rowH + gap) - 1);
+    hover.setAttribute("width", Math.max(3, dayW) + 2); hover.setAttribute("height", rowH + 2); hover.setAttribute("visibility", "visible");
+    svg.style.cursor = "pointer";
+    tip.replaceChildren(
+      el("div", { class: "tv", text: "JD " + hit.j.jd }),
+      el("div", { class: "tl", text: "Night of " + hit.j.date }),
+      el("div", { style: "margin:6px 0" }, statusBadge(s.status)),
+      el("div", { class: "row" }, el("span", { class: "tl", text: "At NRAO" }), el("strong", { text: fmt(s.ok) + " / " + fmt(s.total) })),
+      el("div", { class: "row" }, el("span", { class: "tl", text: "Not at NRAO" }), el("strong", { text: fmt(s.notok) + (s.notok ? " (" + fmtBytes(s.bnot) + ")" : "") })),
+    );
+    tip.style.display = "block";
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = Math.min(window.innerWidth - tw - 8, ev.clientX + 14) + "px";
+    tip.style.top = (ev.clientY + 14 + th > window.innerHeight ? ev.clientY - th - 10 : ev.clientY + 14) + "px";
+  });
+  svg.addEventListener("pointerleave", () => { hover.setAttribute("visibility", "hidden"); tip.style.display = "none"; });
+  svg.addEventListener("click", (ev) => { const hit = locate(ev); if (hit) openJD(hit.j.jd); });
+  host.replaceChildren(svg);
+}
+function openJD(jd) {
+  state.open.add(jd);
+  renderJDTable(filteredJDs());
+  const row = document.querySelector(`#jd-table tr[data-jd="${jd}"]`);
+  if (row) { row.scrollIntoView({ behavior: "smooth", block: "center" }); row.classList.add("sel"); setTimeout(() => row.classList.remove("sel"), 1600); }
+}
+
+// ---------------------------------------------------------------- JD table
+function sortable(th, key, sortState, rerender) {
+  th.addEventListener("click", () => {
+    if (sortState.key === key) sortState.dir *= -1; else { sortState.key = key; sortState.dir = key === "name" ? 1 : -1; }
+    rerender();
+  });
+  if (sortState.key === key) th.setAttribute("aria-sort", sortState.dir > 0 ? "ascending" : "descending");
+}
+function diskList(map, nameFn, onClick, limit) {
+  const span = el("span");
+  const entries = Object.keys(map).map(Number).map((i) => [i, diskCount(map, i)]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) span.append(el("span", { class: "small", text: "none" }));
+  // In table rows, show the busiest few disks and fold the rest into "+N more" (the expanded night lists them all).
+  const shown = limit && entries.length > limit + 1 ? entries.slice(0, limit) : entries;
+  for (const [i, n] of shown) {
+    const p = el("span", { class: "pill", title: fmt(n) + " files", text: nameFn(i) });
+    if (onClick) { p.style.cursor = "pointer"; p.addEventListener("click", (e) => { e.stopPropagation(); onClick(i); }); }
+    span.append(p);
+  }
+  const rest = entries.slice(shown.length);
+  if (rest.length) {
+    span.append(el("span", { class: "small more", text: "+" + rest.length + " more",
+                             title: rest.map(([i, n]) => nameFn(i) + " (" + fmt(n) + " files)").join("\n") }));
+  }
+  return span;
+}
+function renderJDTable(rows) {
+  const tbl = $("jd-table");
+  const k = state.sort.key, dir = state.sort.dir;
+  const val = (r) => k === "jd" ? r.j.jd : k === "status" ? ["nothing", "partial", "nearly", "complete", "nraoonly"].indexOf(r.s.status) :
+    k === "pct" ? (r.s.total ? r.s.ok / r.s.total : 2) : k === "notok" ? r.s.notok : k === "bnot" ? r.s.bnot : k === "total" ? r.s.total :
+    k.startsWith("k") ? (() => { const kk = kArr(r.j, +k.slice(1)); return kk[0] ? kk[1] / kk[0] : 2; })() : 0;
+  rows.sort((a, b) => (val(a) - val(b)) * dir || (b.j.jd - a.j.jd));
+  $("jd-count").textContent = fmt(rows.length) + " nights";
+  const head = el("tr");
+  const cols = [["jd", "Night (JD)"], ["status", "Status"], ["pct", "At NRAO", "num"]];
+  for (const i of selKinds()) cols.push(["k" + i, KINDS[i].label, "num"]);
+  cols.push(["notok", "Not at NRAO", "num"], ["bnot", "Data not at NRAO", "num"], [null, "Karoo disks"], [null, "NRAO disks"]);
+  for (const [key, label, cls] of cols) {
+    const th = el("th", { class: cls || "", text: label, scope: "col" });
+    if (key) sortable(th, key, state.sort, () => renderJDTable(filteredJDs())); else th.style.cursor = "default";
+    head.append(th);
+  }
+  const body = el("tbody");
+  for (const r of rows) {
+    const { j, s } = r;
+    const tr = el("tr", { class: "main", "data-jd": String(j.jd), tabindex: "0", "aria-expanded": String(state.open.has(j.jd)) });
+    tr.append(
+      el("td", null, el("strong", { text: String(j.jd) }), el("div", { class: "small", text: j.date }),
+        NIGHT_SET && !state.set && NIGHT_SET.has(j.jd) ? el("span", { class: "pill", text: "to analyze", title: D.meta.night_set.label }) : null),
+      el("td", null, statusBadge(s.status)),
+      el("td", { class: "num", text: s.total ? fmtPct(s.ok, s.total) : "–" }),
+    );
+    for (const i of selKinds()) {
+      const kk = kArr(j, i), no = noCount(j, i);
+      tr.append(el("td", { class: "num", text: kk[0] ? fmt(kk[1]) + " / " + fmt(kk[0]) : (no ? fmt(no) + " at NRAO only" : "–") }));
+    }
+    tr.append(el("td", { class: "num", text: s.notok ? fmt(s.notok) : "0" }), el("td", { class: "num", text: fmtBytes(s.bnot) }),
+      el("td", { class: "disks" }, diskList(j.kd, kName, setKdisk, 3)), el("td", { class: "disks" }, diskList(j.nd, nName, setNdisk, 3)));
+    const toggle = () => { if (state.open.has(j.jd)) state.open.delete(j.jd); else state.open.add(j.jd); renderJDTable(filteredJDs()); };
+    tr.addEventListener("click", toggle);
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+    body.append(tr);
+    if (state.open.has(j.jd)) body.append(detailRow(j, s, cols.length));
+  }
+  tbl.replaceChildren(el("thead", null, head), body);
+  if (!rows.length) tbl.append(el("tbody", null, el("tr", null, el("td", { colspan: cols.length, class: "empty", text: "No nights match these filters." }))));
+}
+function detailRow(j, s, ncols) {
+  const grid = el("div", { class: "detail-grid" });
+  const kt = el("table", { class: "files" });
+  kt.append(el("tr", null, ...["Kind", "At Karoo", "At NRAO", "Not at NRAO", "md5 differs", "No NRAO copy", "NRAO only"].map((h) => el("th", { text: h }))));
+  for (const i of selKinds()) {
+    const k = kArr(j, i);
+    kt.append(el("tr", null, el("td", { text: KINDS[i].label }), ...[k[0], k[1], k[2], k[3], k[4], noCount(j, i)].map((v) => el("td", { text: fmt(v) }))));
+  }
+  grid.append(el("div", { class: "full" }, el("h3", { text: state.kdisk === "" ? "Counts" : "Counts for files on " + kdiskName() }), kt));
+  const dt = (map, nameFn, title) => {
+    const t = el("table", { class: "files" });
+    t.append(el("tr", null, el("th", { text: "Disk" }), el("th", { text: "Files" })));
+    const ent = Object.keys(map).map(Number).map((i) => [i, diskCount(map, i)]).filter(([, n]) => n).sort((a, b) => b[1] - a[1]);
+    for (const [i, n] of ent) t.append(el("tr", null, el("td", { text: nameFn(i) }), el("td", { text: fmt(n) })));
+    if (!ent.length) t.append(el("tr", null, el("td", { colspan: 2, class: "small", text: "none" })));
+    return el("div", null, el("h3", { text: title }), t);
+  };
+  grid.append(dt(j.kd, kName, "On Karoo disks (at backup time)"), dt(j.nd, nName, "On NRAO disks"));
+  const box = el("div", null, grid);
+  const scoped = state.kdisk !== "";
+  const probs = (D.problems[j.jd] || []).filter((p) => state.kinds[p[1]] && (!scoped || p[4].includes(state.kdisk)));
+  if (probs.length) {
+    const ft = el("table", { class: "files" });
+    ft.append(el("tr", null, ...["File", "Kind", "Size", "Problem", "Karoo disks", "Karoo logged a copy?"].map((h) => el("th", { text: h }))));
+    for (const p of probs) {
+      ft.append(el("tr", null, el("td", { class: "mono", text: p[0] }), el("td", { text: KINDS[p[1]].label }), el("td", { text: fmtBytes(p[2]) }),
+        el("td", { text: FILE_CODES[p[3]] }), el("td", { text: p[4].length ? p[4].map(kName).join(", ") : "none" }),
+        el("td", { text: p[5] ? "yes" : "no" })));
+    }
+    const more = (D.problems_total[j.jd] || 0) - (D.problems[j.jd] || []).length;
+    const title = scoped ? "Files with a problem on " + kdiskName() + " (" + fmt(s.notok) + ")"
+                         : "Files with a problem (" + fmt(D.problems_total[j.jd] || 0) + ")";
+    box.append(el("h3", { style: "font-size:12px;margin:8px 0 4px;color:var(--ink-2)", text: title }),
+      el("div", { class: "problem-list" }, ft));
+    if (more > 0) box.append(el("p", { class: "small" }, "This page lists the first " + fmt((D.problems[j.jd] || []).length) +
+      " problem files of the night; all are listed in ", el("a", { href: D.meta.problems_csv, text: D.meta.problems_csv }), "."));
+  } else if (s.notok === 0) {
+    box.append(el("p", { class: "small", text: "Every selected file for this night is at NRAO with a matching md5." }));
+  }
+  return el("tr", { class: "detail" }, el("td", { class: "detail-cell", colspan: ncols }, box));
+}
+
+// ---------------------------------------------------------------- disk tables
+function inRange(jd) { return inSet(jd) && (state.jd0 == null || jd >= state.jd0) && (state.jd1 == null || jd <= state.jd1); }
+function renderKdisks() {
+  const rows = [];
+  D.kdisk.forEach((d, idx) => {
+    if (!d || !d.any) return;
+    const r = { idx, name: D.kstores[idx].name, files: 0, ok: 0, bytes: 0, bnot: 0, jds: [], gaps: [] };
+    for (const [jd, per] of Object.entries(d.jds)) {
+      if (!inRange(+jd)) continue;
+      let f = 0, o = 0, b = 0, bn = 0;
+      for (const i of selKinds()) { f += per[i][0]; o += per[i][1]; b += per[i][5]; bn += per[i][6]; }
+      if (!f) continue;
+      r.files += f; r.ok += o; r.bytes += b; r.bnot += bn; r.jds.push(+jd); if (o < f) r.gaps.push(+jd);
+    }
+    if (r.files) rows.push(r);
+  });
+  const k = state.ksort.key, dir = state.ksort.dir;
+  const val = (r) => k === "name" ? r.name : k === "pct" ? r.ok / r.files : k === "files" ? r.files : k === "notok" ? r.files - r.ok : k === "bnot" ? r.bnot : k === "bytes" ? r.bytes : k === "jds" ? r.jds.length : 0;
+  rows.sort((a, b) => { const x = val(a), y = val(b); return (typeof x === "string" ? x.localeCompare(y, undefined, { numeric: true }) : x - y) * dir; });
+  const head = el("tr");
+  const cols = [["name", "Disk"], [null, "Location"], ["files", "Files on disk", "num"], ["pct", "At NRAO"], ["notok", "Not at NRAO", "num"],
+    ["bnot", "Data not at NRAO", "num"], ["jds", "Nights", "num"], [null, "Nights not fully at NRAO"]];
+  for (const [key, label, cls] of cols) {
+    const th = el("th", { class: cls || "", text: label, scope: "col" });
+    if (key) sortable(th, key, state.ksort, renderKdisks); else th.style.cursor = "default";
+    head.append(th);
+  }
+  const body = el("tbody");
+  for (const r of rows) {
+    const s = D.kstores[r.idx];
+    const p = pct(r.ok, r.files);
+    const tr = el("tr", { class: "main" + (state.kdisk === r.idx ? " sel" : ""), tabindex: "0" });
+    const gaps = el("td", { class: "disks" });
+    if (!r.gaps.length) gaps.append(el("span", { class: "st st-complete" }, el("i", { "aria-hidden": "true", text: "✓" }), "none"));
+    r.gaps.sort((a, b) => a - b).slice(0, 40).forEach((jd) => {
+      const pill = el("span", { class: "pill", text: String(jd), style: "cursor:pointer" });
+      pill.addEventListener("click", (e) => { e.stopPropagation(); openJD(jd); });
+      gaps.append(pill);
+    });
+    if (r.gaps.length > 40) gaps.append(el("span", { class: "small", text: " + " + (r.gaps.length - 40) + " more" }));
+    const jr = r.jds.length ? Math.min(...r.jds) + "–" + Math.max(...r.jds) : "";
+    tr.append(
+      el("td", null, el("strong", { text: r.name }), s.available === false ? el("div", { class: "small", text: "marked unavailable" }) : null),
+      el("td", { class: "small mono", text: s.host + ":" + s.prefix }),
+      el("td", { class: "num", text: fmt(r.files) }, el("div", { class: "small", text: fmtBytes(r.bytes) })),
+      el("td", null, el("span", { class: "meter", role: "meter", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": p.toFixed(1),
+        "aria-label": "At NRAO" }, el("span", { style: "width:" + p + "%" })), " ", el("strong", { text: fmtPct(r.ok, r.files) })),
+      el("td", { class: "num", text: fmt(r.files - r.ok) }),
+      el("td", { class: "num", text: fmtBytes(r.bnot) }),
+      el("td", { class: "num", text: fmt(r.jds.length) }, el("div", { class: "small", text: jr })),
+      gaps,
+    );
+    tr.addEventListener("click", () => setKdisk(r.idx));
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter") setKdisk(r.idx); });
+    body.append(tr);
+  }
+  $("kdisk-table").replaceChildren(el("thead", null, head), body);
+  if (!rows.length) body.append(el("tr", null, el("td", { colspan: cols.length, class: "empty", text: "No Karoo disk holds files in this selection." })));
+}
+function renderNdisks() {
+  const rows = [];
+  D.ndisk.forEach((d, idx) => {
+    if (!d || !d.any) return;
+    const r = { idx, name: D.nstores[idx].name, files: 0, bytes: 0, jds: [] };
+    for (const [jd, per] of Object.entries(d.jds)) {
+      if (!inRange(+jd)) continue;
+      let f = 0, b = 0;
+      for (const i of selKinds()) { f += per[i][0]; b += per[i][1]; }
+      if (!f) continue;
+      r.files += f; r.bytes += b; r.jds.push(+jd);
+    }
+    if (r.files) rows.push(r);
+  });
+  const k = state.nsort.key, dir = state.nsort.dir;
+  const val = (r) => k === "name" ? r.name : k === "files" ? r.files : k === "bytes" ? r.bytes : k === "jds" ? r.jds.length : k === "first" ? Math.min(...r.jds) : 0;
+  rows.sort((a, b) => { const x = val(a), y = val(b); return (typeof x === "string" ? x.localeCompare(y, undefined, { numeric: true }) : x - y) * dir; });
+  const head = el("tr");
+  const cols = [["name", "Disk"], [null, "Location"], ["files", "Files", "num"], ["bytes", "Data", "num"], ["jds", "Nights", "num"], ["first", "JD range"]];
+  for (const [key, label, cls] of cols) {
+    const th = el("th", { class: cls || "", text: label, scope: "col" });
+    if (key) sortable(th, key, state.nsort, renderNdisks); else th.style.cursor = "default";
+    head.append(th);
+  }
+  const body = el("tbody");
+  for (const r of rows) {
+    const s = D.nstores[r.idx];
+    const tr = el("tr", { class: "main" + (state.ndisk === r.idx ? " sel" : ""), tabindex: "0" });
+    tr.append(el("td", null, el("strong", { text: r.name }), s.available === false ? el("div", { class: "small", text: "marked unavailable" }) : null),
+      el("td", { class: "small mono", text: s.host + ":" + s.prefix }),
+      el("td", { class: "num", text: fmt(r.files) }), el("td", { class: "num", text: fmtBytes(r.bytes) }),
+      el("td", { class: "num", text: fmt(r.jds.length) }), el("td", { text: Math.min(...r.jds) + "–" + Math.max(...r.jds) }));
+    tr.addEventListener("click", () => setNdisk(r.idx));
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter") setNdisk(r.idx); });
+    body.append(tr);
+  }
+  $("ndisk-table").replaceChildren(el("thead", null, head), body);
+  if (!rows.length) body.append(el("tr", null, el("td", { colspan: cols.length, class: "empty", text: "No NRAO disk holds files in this selection." })));
+}
+
+// ---------------------------------------------------------------- catch-up since data taking ended
+// For the nights and file kinds shown: of the files that were not at NRAO when data taking ended, how much has
+// arrived since, day by day. Missing then = still missing now + arrived since (no file has left NRAO).
+const ARR = D.arrivals;
+const dayDate = (d) => { const t = new Date(ARR.day0 + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + d); return t; };
+const isoDay = (d) => dayDate(d).toISOString().slice(0, 10);
+function catchupSeries(rows) {
+  const shown = new Set(rows.map((r) => r.j.jd)), kinds = new Set(selKinds());
+  let missN = 0, missB = 0;
+  for (const { j } of rows) for (const i of kinds) { const k = j.k[i]; missN += k[0] - k[1]; missB += k[6]; }
+  const dayN = new Array(ARR.days + 1).fill(0), dayB = new Array(ARR.days + 1).fill(0);
+  for (const [d, jd, kind, n, b] of ARR.rows) {
+    if (d < 0 || d > ARR.days || !shown.has(jd) || !kinds.has(kind)) continue;
+    dayN[d] += n; dayB[d] += b;
+  }
+  let cn = 0, cb = 0;
+  const pts = dayN.map((n, d) => { cn += n; cb += dayB[d]; return { d, n, b: dayB[d], cn, cb }; });
+  return { pts, totN: missN + cn, totB: missB + cb, nowN: cn, nowB: cb };
+}
+function renderCatchup(rows) {
+  const host = $("catchup"), S = catchupSeries(rows);
+  $("catchup-note").textContent = "Data taking ended " + ARR.t0 + " (last file " + ARR.t0_file + "). A file counts as arrived on the day " +
+    "the NRAO Librarian first recorded a copy of it on an NRAO disk (UTC). 100% would mean everything missing then is at NRAO now.";
+  $("catchup-scope").hidden = state.kdisk === "" && state.ndisk === "";
+  if (!S.totN) {
+    $("catchup-summary").textContent = "Nothing in this selection was missing from NRAO when data taking ended.";
+    host.replaceChildren(); $("catchup-table").replaceChildren(); return;
+  }
+  $("catchup-summary").textContent = "Of the " + fmt(S.totN) + " files (" + fmtBytes(S.totB) + ") not at NRAO when data taking ended, " +
+    fmt(S.nowN) + " files (" + fmtPct(S.nowN, S.totN) + ") and " + fmtBytes(S.nowB) + " (" + fmtPct(S.nowB, S.totB) + ") have arrived since.";
+
+  const series = [
+    // one hue (the files we care about, as in the next chart); the two measures differ by dash and direct label
+    { key: "cn", tot: S.totN, label: "Files", short: "Files", color: "var(--series-1)", dash: "" },
+    { key: "cb", tot: S.totB, label: "Data volume", short: "Volume", color: "var(--series-1)", dash: "6 4" },
+  ];
+  const W = Math.max(320, host.clientWidth), H = 240, left = 40, right = W < 520 ? 92 : 128, top = 10, bottom = 26;
+  const pw = W - left - right, ph = H - top - bottom, nd = ARR.days + 1;
+  const maxP = Math.max(...series.map((s) => pct(S.pts[S.pts.length - 1][s.key], s.tot)));
+  const step = maxP <= 20 ? 5 : maxP <= 45 ? 10 : 20;
+  const yMax = Math.min(100, Math.max(step, Math.ceil(maxP * 1.15 / step) * step));
+  const x = (d) => left + (d / nd) * pw, y = (p) => top + ph - (p / yMax) * ph;
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
+    "aria-label": "Cumulative share of the files and data missing at the end of data taking that have since arrived at NRAO" });
+  for (let p = 0; p <= yMax + 1e-9; p += step) {  // recessive grid + y labels
+    svg.append(svgEl("line", { x1: left, x2: left + pw, y1: y(p), y2: y(p), stroke: p ? "var(--grid)" : "var(--axis)", "stroke-width": 1 }));
+    const t = svgEl("text", { x: left - 6, y: y(p) + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11 }); t.textContent = p + "%"; svg.append(t);
+  }
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const xl = (d, txt, anchor) => { const t = svgEl("text", { x: x(d), y: H - 8, "text-anchor": anchor, fill: "var(--muted)", "font-size": 11 }); t.textContent = txt; svg.append(t); };
+  xl(0, months[dayDate(0).getUTCMonth()] + " " + dayDate(0).getUTCDate(), "start");
+  for (let d = 1; d < nd; d++) {
+    const t = dayDate(d);
+    if (t.getUTCDate() !== 1) continue;
+    svg.append(svgEl("line", { x1: x(d), x2: x(d), y1: top, y2: top + ph, stroke: "var(--grid)", "stroke-width": 1 }));
+    if (x(d) - x(0) > 56) xl(d, months[t.getUTCMonth()], "middle");
+  }
+  // lines: 0% at the end of data taking, then the running total at the end of each day
+  const ends = [];
+  for (const s of series) {
+    const pts = [[x(0), y(0)], ...S.pts.map((p) => [x(p.d + 1), y(pct(p[s.key], s.tot))])];
+    svg.append(svgEl("polyline", { points: pts.map((p) => p.join(",")).join(" "), fill: "none", stroke: s.color,
+      "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": s.dash ? "butt" : "round", "stroke-dasharray": s.dash }));
+    ends.push({ s, px: pts[pts.length - 1][0], py: pts[pts.length - 1][1], v: S.pts[S.pts.length - 1][s.key] });
+  }
+  // direct labels at the line ends, nudged apart if they would overlap
+  ends.sort((a, b) => a.py - b.py);
+  if (ends.length === 2 && ends[1].py - ends[0].py < 14) { const mid = (ends[0].py + ends[1].py) / 2; ends[0].ly = mid - 7; ends[1].ly = mid + 7; }
+  for (const e of ends) {
+    svg.append(svgEl("circle", { cx: e.px, cy: e.py, r: 4, fill: e.s.color, stroke: "var(--surface)", "stroke-width": 2 }));
+    const t = svgEl("text", { x: e.px + 8, y: (e.ly ?? e.py) + 4, fill: "var(--ink-2)", "font-size": 12 });
+    t.textContent = (W < 520 ? e.s.short : e.s.label) + " " + fmtPct(e.v, e.s.tot); svg.append(t);
+  }
+  // hover: crosshair snapped to the nearest day, with a tooltip
+  const cross = svgEl("line", { y1: top, y2: top + ph, stroke: "var(--muted)", "stroke-width": 1, visibility: "hidden" });
+  const dots = series.map((s) => svgEl("circle", { r: 4, fill: s.color, stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" }));
+  svg.append(cross, ...dots);
+  const hit = svgEl("rect", { x: left, y: top, width: pw, height: ph, fill: "transparent" });
+  svg.append(hit);
+  const tip = $("tip");
+  const hide = () => { cross.setAttribute("visibility", "hidden"); dots.forEach((c) => c.setAttribute("visibility", "hidden")); tip.style.display = "none"; };
+  hit.addEventListener("pointermove", (ev) => {
+    const r = svg.getBoundingClientRect(), sx = (ev.clientX - r.left) * (W / r.width);
+    const d = Math.max(0, Math.min(ARR.days, Math.round((sx - left) / pw * nd) - 1));  // day d's point sits at d + 1
+    const p = S.pts[d], cx = x(d + 1);
+    cross.setAttribute("x1", cx); cross.setAttribute("x2", cx); cross.setAttribute("visibility", "visible");
+    series.forEach((s, i) => { dots[i].setAttribute("cx", cx); dots[i].setAttribute("cy", y(pct(p[s.key], s.tot))); dots[i].setAttribute("visibility", "visible"); });
+    const row = (label, value) => el("div", { class: "row" }, el("span", { class: "tl", text: label }), el("span", { text: value }));
+    tip.replaceChildren(
+      el("div", { class: "tv", text: isoDay(d) }),
+      el("div", { class: "small", text: "Day " + d + " after data taking ended" }),
+      row("Files arrived so far", fmt(p.cn) + " (" + fmtPct(p.cn, S.totN) + ")"),
+      row("Data arrived so far", fmtBytes(p.cb) + " (" + fmtPct(p.cb, S.totB) + ")"),
+      row("Arrived this day", fmt(p.n) + " files, " + fmtBytes(p.b)));
+    tip.style.display = "block";
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = Math.min(window.innerWidth - tw - 8, ev.clientX + 14) + "px";
+    tip.style.top = (ev.clientY + 14 + th > window.innerHeight ? ev.clientY - th - 10 : ev.clientY + 14) + "px";
+  });
+  hit.addEventListener("pointerleave", hide);
+  host.replaceChildren(svg);
+
+  // the same numbers as a weekly table
+  const tbl = $("catchup-table");
+  const head = el("tr", null, ...["Week starting", "Files arrived", "Files so far", "Data arrived", "Data so far"].map((h, i) =>
+    el("th", { class: i ? "num" : "", text: h, style: "cursor:default" })));
+  const body = el("tbody");
+  for (let w = 0; w * 7 <= ARR.days; w++) {
+    const wk = S.pts.slice(w * 7, w * 7 + 7), last = wk[wk.length - 1];
+    const n = wk.reduce((a, p) => a + p.n, 0), b = wk.reduce((a, p) => a + p.b, 0);
+    body.append(el("tr", null, el("td", { text: isoDay(w * 7) }), el("td", { class: "num", text: fmt(n) }),
+      el("td", { class: "num", text: fmtPct(last.cn, S.totN) }), el("td", { class: "num", text: fmtBytes(b) }),
+      el("td", { class: "num", text: fmtPct(last.cb, S.totB) })));
+  }
+  tbl.replaceChildren(el("thead", null, head), body);
+}
+
+// ---------------------------------------------------------------- what's arriving at NRAO
+// Every new copy NRAO recorded since data taking ended. "Files we care about" = the report's files for the nights and
+// kinds the page is showing; "other new files" = the first copy of anything else; "extra copies" = later copies of
+// files NRAO already had (the databases can't say whether those crossed the link or were made within NRAO).
+const INC = D.incoming;
+const incState = { metric: "bytes", copies: true };
+const INC_SERIES = [
+  { key: "care", label: "Files we care about", color: "var(--series-1)" },
+  { key: "other", label: "Other new files", color: "var(--series-2)" },
+  { key: "copy", label: "Extra copies", color: "var(--series-3)" },
+];
+const OTHER_PARTS = ["Report files outside this selection", "Autos", "Other zen.* products", "Database backups (maint.*)", "Other files"];
+const incZero = () => ({ care: [0, 0], other: [0, 0], copy: [0, 0], parts: OTHER_PARTS.map(() => [0, 0]) });
+function incAdd(t, f) {
+  for (const k of ["care", "other", "copy"]) { t[k][0] += f[k][0]; t[k][1] += f[k][1]; }
+  f.parts.forEach((p, i) => { t.parts[i][0] += p[0]; t.parts[i][1] += p[1]; });
+}
+function incomingDays(rows) {
+  const shown = new Set(rows.map((r) => r.j.jd)), kinds = new Set(selKinds());
+  const days = Array.from({ length: ARR.days + 1 }, incZero);
+  for (const [d, cat, jd, n, b] of INC.rows) {
+    if (d < 0 || d > ARR.days) continue;
+    const day = days[d];
+    let key = "other";
+    if (cat === 8) key = "copy";
+    else if (cat <= 2 && kinds.has(cat) && shown.has(jd)) key = "care";
+    day[key][0] += n; day[key][1] += b;
+    if (key === "other") { const p = cat <= 3 ? 0 : cat - 3; day.parts[p][0] += n; day.parts[p][1] += b; }
+  }
+  return days;
+}
+function initIncoming() {
+  for (const [metric, label] of [["bytes", "Data volume"], ["files", "Files"]]) {
+    const b = el("button", { class: "chip", "aria-pressed": String(incState.metric === metric), text: label });
+    b.addEventListener("click", () => {
+      incState.metric = metric;
+      document.querySelectorAll("#incoming-metric .chip").forEach((c) => c.setAttribute("aria-pressed", String(c === b)));
+      renderIncoming(filteredJDs());
+    });
+    $("incoming-metric").append(b);
+  }
+  $("incoming-copies").addEventListener("click", (e) => {
+    incState.copies = !incState.copies; e.currentTarget.setAttribute("aria-pressed", String(incState.copies)); renderIncoming(filteredJDs());
+  });
+}
+function renderIncoming(rows) {
+  const host = $("incoming"), days = incomingDays(rows), m = incState.metric === "bytes" ? 1 : 0;
+  const series = INC_SERIES.filter((s) => s.key !== "copy" || incState.copies);
+  const fv = (v) => m ? fmtBytes(v) : fmt(v) + " files";
+  const total = (from) => { const t = incZero(); for (let d = from; d < days.length; d++) incAdd(t, days[d]); return t; };
+  const all = total(0), recent = total(Math.max(0, days.length - 28));
+  const say = (t, when) => {
+    const nw = t.care[m] + t.other[m], share = " (" + fmtPct(t.care[m], nw) + ")";
+    return m ? when + ", NRAO received " + fmtBytes(nw) + " of new files, and " + fmtBytes(t.care[m]) + share + " of that was files we care about."
+             : when + ", NRAO received " + fmt(nw) + " new files, and " + fmt(t.care[m]) + share + " of them were files we care about.";
+  };
+  $("incoming-summary").textContent = say(all, "Since data taking ended") + " " + say(recent, "In the last 28 days") + " It also recorded " +
+    (m ? fmtBytes(all.copy[m]) + " of extra copies of files it already had (" + fmtBytes(recent.copy[m]) + " in the last 28 days)."
+       : fmt(all.copy[m]) + " extra copies of files it already had (" + fmt(recent.copy[m]) + " in the last 28 days).");
+  $("incoming-legend").replaceChildren(...series.map((s) => el("span", null, el("span", { class: "sw", style: "background:" + s.color }), s.label)));
+
+  const W = Math.max(320, host.clientWidth), weekly = W < 600, step = weekly ? 7 : 1;
+  const bins = [];
+  for (let s = 0; s < days.length; s += step) {
+    const b = incZero(); b.s = s; b.e = Math.min(days.length - 1, s + step - 1);
+    for (let d = b.s; d <= b.e; d++) incAdd(b, days[d]);
+    bins.push(b);
+  }
+  $("incoming-note").textContent = "Each bar is one " + (weekly ? "week" : "day") + " (UTC). Files we care about are the report's files " +
+    "(" + KINDS.map((k) => k.label).join(", ") + ") for the nights and kinds the page is showing, so the switch and filters above change them. " +
+    "Other new files are the first copy at NRAO of anything else; hover for the breakdown. Extra copies are later copies of files NRAO " +
+    "already had, written to herastore03 disks; the databases can't tell whether they crossed the link or were copied within NRAO." +
+    (state.kdisk !== "" || state.ndisk !== "" ? " With a disk filter on, files we care about are all files of the nights shown." : "");
+
+  const H = 240, left = 48, right = 8, top = 22, bottom = 26, pw = W - left - right, ph = H - top - bottom;
+  const tot = (b) => series.reduce((a, s) => a + b[s.key][m], 0);
+  const maxV = Math.max(1, ...bins.map(tot));
+  const unit = m ? (maxV >= 1e12 ? 1e12 : maxV >= 1e9 ? 1e9 : 1e6) : 1, uname = m ? { 1e12: "TB", 1e9: "GB", 1e6: "MB" }[unit] : "files";
+  const raw = maxV / unit / 4, mag = 10 ** Math.floor(Math.log10(raw || 1));
+  const stepY = [1, 2, 2.5, 5, 10].map((f) => f * mag).find((v) => v >= raw) || raw;
+  const yMax = Math.max(stepY, Math.ceil(maxV / unit / stepY) * stepY);
+  const yv = (v) => (v / unit / yMax) * ph, base = top + ph;
+  const xd = (d) => left + (d / days.length) * pw;
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
+    "aria-label": "New copies recorded at NRAO per " + (weekly ? "week" : "day") + ", stacked by kind" });
+  const ttl = svgEl("text", { x: left, y: 12, fill: "var(--muted)", "font-size": 11 }); ttl.textContent = uname + " per " + (weekly ? "week" : "day"); svg.append(ttl);
+  for (let v = 0; v <= yMax + 1e-9; v += stepY) {
+    const yy = base - (v / yMax) * ph;
+    svg.append(svgEl("line", { x1: left, x2: left + pw, y1: yy, y2: yy, stroke: v ? "var(--grid)" : "var(--axis)", "stroke-width": 1 }));
+    const t = svgEl("text", { x: left - 6, y: yy + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11 });
+    t.textContent = m ? String(+v.toFixed(2)) : fmt(Math.round(v)); svg.append(t);
+  }
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const xl = (d, txt, anchor) => { const t = svgEl("text", { x: xd(d), y: H - 8, "text-anchor": anchor, fill: "var(--muted)", "font-size": 11 }); t.textContent = txt; svg.append(t); };
+  xl(0, months[dayDate(0).getUTCMonth()] + " " + dayDate(0).getUTCDate(), "start");
+  for (let d = 1; d < days.length; d++) {
+    const t = dayDate(d); if (t.getUTCDate() !== 1) continue;
+    svg.append(svgEl("line", { x1: xd(d), x2: xd(d), y1: top, y2: base, stroke: "var(--grid)", "stroke-width": 1 }));
+    if (xd(d) - xd(0) > 56) xl(d, months[t.getUTCMonth()], "middle");
+  }
+  const band = svgEl("rect", { y: top, height: ph, fill: "var(--wash)", visibility: "hidden" });
+  svg.append(band);
+  const topRounded = (x, y, w, h, r) => { r = Math.min(r, w / 2, h);
+    return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`; };
+  const bw = pw / bins.length, barW = Math.max(1, bw - 2);
+  bins.forEach((b) => {
+    const x = xd(b.s) + (bw - barW) / 2;
+    const segs = series.map((s) => [s, yv(b[s.key][m])]).filter(([, h]) => h > 0);
+    let y0 = base;
+    segs.forEach(([s, h], i) => {
+      const gap = i > 0 && h > 2.5 ? 2 : 0;   // 2px surface gap between stacked segments
+      const yTop = y0 - h;
+      if (i === segs.length - 1) svg.append(svgEl("path", { d: topRounded(x, yTop, barW, h - gap, 3), fill: s.color }));
+      else svg.append(svgEl("rect", { x, y: yTop, width: barW, height: h - gap, fill: s.color }));
+      y0 = yTop;
+    });
+  });
+  const tip = $("tip");
+  const hit = svgEl("rect", { x: left, y: top, width: pw, height: ph, fill: "transparent" });
+  svg.append(hit);
+  hit.addEventListener("pointermove", (ev) => {
+    const r = svg.getBoundingClientRect(), sx = (ev.clientX - r.left) * (W / r.width);
+    const i = Math.max(0, Math.min(bins.length - 1, Math.floor((sx - left) / bw))), b = bins[i];
+    band.setAttribute("x", xd(b.s)); band.setAttribute("width", bw); band.setAttribute("visibility", "visible");
+    const row = (label, value, sw) => el("div", { class: "row" },
+      el("span", { class: "tl" }, sw ? el("span", { class: "sw", style: "background:" + sw + ";margin-right:6px;vertical-align:-1px" }) : null, label),
+      el("span", { text: value }));
+    const kids = [el("div", { class: "tv", text: weekly ? "Week of " + isoDay(b.s) : isoDay(b.s) })];
+    for (const s of series) kids.push(row(s.label, fv(b[s.key][m]), s.color));
+    b.parts.forEach((p, k) => { if (p[m]) kids.push(row("  · " + OTHER_PARTS[k], fv(p[m]))); });
+    const nw = b.care[m] + b.other[m];
+    kids.push(el("div", { class: "small", text: "Files we care about: " + fmtPct(b.care[m], nw) + " of new files" }));
+    tip.replaceChildren(...kids);
+    tip.style.display = "block";
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = Math.min(window.innerWidth - tw - 8, ev.clientX + 14) + "px";
+    tip.style.top = (ev.clientY + 14 + th > window.innerHeight ? ev.clientY - th - 10 : ev.clientY + 14) + "px";
+  });
+  hit.addEventListener("pointerleave", () => { band.setAttribute("visibility", "hidden"); tip.style.display = "none"; });
+  host.replaceChildren(svg);
+
+  // the same numbers by week, in the metric shown
+  const head = el("tr", null, ...["Week starting", ...INC_SERIES.map((s) => s.label), "Care-about share of new"].map((h, i) =>
+    el("th", { class: i ? "num" : "", text: h, style: "cursor:default" })));
+  const body = el("tbody");
+  for (let s = 0; s < days.length; s += 7) {
+    const w = incZero(); for (let d = s; d < Math.min(days.length, s + 7); d++) incAdd(w, days[d]);
+    body.append(el("tr", null, el("td", { text: isoDay(s) }), ...INC_SERIES.map((x) => el("td", { class: "num", text: fv(w[x.key][m]) })),
+      el("td", { class: "num", text: fmtPct(w.care[m], w.care[m] + w.other[m]) })));
+  }
+  $("incoming-table").replaceChildren(el("thead", null, head), body);
+}
+
+// ---------------------------------------------------------------- main
+function render() {
+  const rows = filteredJDs();
+  renderKPIs(rows);
+  renderStrip(rows);
+  renderCatchup(rows);
+  renderIncoming(rows);
+  renderJDTable(rows);
+  renderKdisks();
+  renderNdisks();
+}
+initHeader();
+initIncoming();
+render();
+let rt = null;
+window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => {
+  const rows = filteredJDs(); renderStrip(rows); renderCatchup(rows); renderIncoming(rows); }, 150); });
+</script>
+</body>
+</html>

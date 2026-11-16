@@ -91,6 +91,9 @@ button.link { font: inherit; font-size: 12px; background: none; border: none; co
 .st-partial i { background: var(--serious); }
 .st-nothing i { background: var(--critical); }
 .st-nraoonly i { background: var(--neutral); }
+.status-checks { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 8px; font-size: 13px; }
+.status-checks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.status-checks .n { color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* strip chart */
 #strip { position: relative; width: 100%; }
@@ -112,7 +115,7 @@ details.table-view summary { cursor: pointer; font-size: 12px; color: var(--acce
 details.table-view table { margin-top: 6px; }
 #incoming { position: relative; width: 100%; }
 #incoming svg { display: block; width: 100%; touch-action: pan-y; }
-.incoming-controls { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 0 0 8px; }
+.incoming-controls, .chart-controls { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 0 0 8px; }
 
 /* tables */
 .scroll { overflow-x: auto; }
@@ -193,6 +196,7 @@ table.data td.disks .more { white-space: nowrap; margin-left: 2px; }
       </div>
     </div>
     <p class="catchup-sum" id="catchup-summary"></p>
+    <div class="chart-controls"><span class="small">Dates</span><span class="chips win-chips"></span><span class="small win-label"></span></div>
     <div id="catchup"></div>
     <p class="small" id="catchup-note"></p>
     <p class="small" id="catchup-scope" hidden>This chart counts every file of the nights shown, not just those on the selected disk.</p>
@@ -210,17 +214,10 @@ table.data td.disks .more { white-space: nowrap; margin-left: 2px; }
       <span class="chips" id="incoming-metric"></span>
       <span class="chips"><button class="chip" id="incoming-copies" aria-pressed="true">Include extra copies</button></span>
     </div>
+    <div class="chart-controls"><span class="small">Dates</span><span class="chips win-chips"></span><span class="small win-label"></span></div>
     <div id="incoming"></div>
     <p class="small" id="incoming-note"></p>
     <details class="table-view"><summary>Show as a weekly table</summary><div class="scroll"><table class="data" id="incoming-table"></table></div></details>
-  </section>
-
-  <section class="card">
-    <div class="card-head">
-      <h2>Nights</h2>
-      <span class="small" id="jd-count"></span>
-    </div>
-    <div class="scroll"><table class="data" id="jd-table"></table></div>
   </section>
 
   <section class="card">
@@ -238,6 +235,15 @@ table.data td.disks .more { white-space: nowrap; margin-left: 2px; }
     </div>
     <div class="scroll"><table class="data" id="ndisk-table"></table></div>
   </section>
+  <section class="card">
+    <div class="card-head">
+      <h2>Nights</h2>
+      <span class="small" id="jd-count"></span>
+    </div>
+    <div class="status-checks" id="jd-status" role="group" aria-label="Statuses shown in the table"></div>
+    <div class="scroll"><table class="data" id="jd-table"></table></div>
+  </section>
+
 </main>
 <div class="tooltip" id="tip" role="status"></div>
 
@@ -293,7 +299,8 @@ const nName = (i) => D.nstores[i].name;
 const NIGHT_SET = D.meta.night_set ? new Set(D.meta.night_set.jds) : null;
 const inSet = (jd) => !state.set || NIGHT_SET.has(jd);
 const state = { set: false, kinds: KINDS.map(() => true), status: "", jd0: null, jd1: null, kdisk: "", ndisk: "", text: "",
-  sort: { key: "jd", dir: -1 }, open: new Set(), ksort: { key: "name", dir: 1 }, nsort: { key: "name", dir: 1 } };
+  sort: { key: "jd", dir: -1 }, open: new Set(), ksort: { key: "name", dir: 1 }, nsort: { key: "name", dir: 1 },
+  hide: new Set() };  // statuses unchecked above the Nights table (that table only)
 const selKinds = () => KINDS.map((_, i) => i).filter((i) => state.kinds[i]);
 
 // per-JD stats over the selected kinds. k[i] = [total, ok, missing, mismatch, noinst, bytes, bytes_notok, missing_nokaroo]
@@ -385,7 +392,8 @@ function initHeader() {
   $("f-reset").addEventListener("click", () => {
     // Reset clears the filters but leaves the page-wide night switch as it is.
     Object.assign(state, { kinds: KINDS.map(() => true), status: "", jd0: null, jd1: null, kdisk: "", ndisk: "", text: "" });
-    state.open.clear();
+    state.open.clear(); state.hide.clear();
+    document.querySelectorAll("#jd-status input").forEach((c) => { c.checked = true; });
     document.querySelectorAll("#kind-chips .chip").forEach((b) => b.setAttribute("aria-pressed", "true"));
     ["f-status", "f-kdisk", "f-ndisk", "f-text"].forEach((id) => { $(id).value = ""; });
     fillJDRange();
@@ -393,6 +401,12 @@ function initHeader() {
   });
   for (const key of Object.keys(STATUS)) {
     $("strip-legend").append(el("span", null, el("span", { class: "sw", style: "background:" + STATUS[key].color }), STATUS[key].label));
+    const box = el("input", { type: "checkbox" });
+    box.checked = true;
+    box.addEventListener("change", () => { if (box.checked) state.hide.delete(key); else state.hide.add(key); renderJDTable(filteredJDs()); });
+    $("jd-status").append(el("label", null, box,
+      el("span", { class: "st st-" + key }, el("i", { "aria-hidden": "true", text: STATUS[key].icon }), STATUS[key].label),
+      el("span", { class: "n", "data-status": key })));
   }
 }
 const JD_MIN = D.jds.reduce((m, j) => Math.min(m, j.jd), Infinity);
@@ -553,8 +567,14 @@ function renderJDTable(rows) {
   const val = (r) => k === "jd" ? r.j.jd : k === "status" ? ["nothing", "partial", "nearly", "complete", "nraoonly"].indexOf(r.s.status) :
     k === "pct" ? (r.s.total ? r.s.ok / r.s.total : 2) : k === "notok" ? r.s.notok : k === "bnot" ? r.s.bnot : k === "total" ? r.s.total :
     k.startsWith("k") ? (() => { const kk = kArr(r.j, +k.slice(1)); return kk[0] ? kk[1] / kk[0] : 2; })() : 0;
+  // the status checkboxes show how many nights of each status the filters leave, and hide the unchecked ones
+  const counts = {};
+  for (const r of rows) counts[r.s.status] = (counts[r.s.status] || 0) + 1;
+  document.querySelectorAll("#jd-status .n").forEach((n) => { n.textContent = fmt(counts[n.dataset.status] || 0); });
+  const total = rows.length;
+  rows = rows.filter((r) => !state.hide.has(r.s.status));
   rows.sort((a, b) => (val(a) - val(b)) * dir || (b.j.jd - a.j.jd));
-  $("jd-count").textContent = fmt(rows.length) + " nights";
+  $("jd-count").textContent = (rows.length < total ? fmt(rows.length) + " of " + fmt(total) : fmt(total)) + " nights";
   const head = el("tr");
   const cols = [["jd", "Night (JD)"], ["status", "Status"], ["pct", "At NRAO", "num"]];
   for (const i of selKinds()) cols.push(["k" + i, KINDS[i].label, "num"]);
@@ -736,6 +756,77 @@ function renderNdisks() {
 const ARR = D.arrivals;
 const dayDate = (d) => { const t = new Date(ARR.day0 + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + d); return t; };
 const isoDay = (d) => dayDate(d).toISOString().slice(0, 10);
+
+// ---------------------------------------------------------------- shared time window of the two charts over time
+// Both charts show days d0..d1 (counted from the day data taking ended). The preset buttons, dragging across either
+// chart, and double-clicking it (back to all) change the window for both, so they always cover the same dates.
+const timeWin = { d0: 0, d1: ARR.days };
+const WIN_PRESETS = [["All", 0], ["Last 60 days", 60], ["Last 30 days", 30], ["Last 14 days", 14]];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const monthDay = (d) => MONTHS[dayDate(d).getUTCMonth()] + " " + dayDate(d).getUTCDate();
+function setTimeWin(d0, d1) {
+  timeWin.d0 = Math.max(0, Math.min(d0, d1)); timeWin.d1 = Math.min(ARR.days, Math.max(d0, d1));
+  const rows = filteredJDs();
+  renderCatchup(rows); renderIncoming(rows); syncTimeWin();
+}
+function initTimeWin() {
+  for (const host of document.querySelectorAll(".win-chips"))
+    for (const [label, n] of WIN_PRESETS) {
+      if (n && n >= ARR.days + 1) continue;  // no longer than the data
+      const b = el("button", { class: "chip", "data-n": n, text: label });
+      b.addEventListener("click", () => setTimeWin(n ? ARR.days - n + 1 : 0, ARR.days));
+      host.append(b);
+    }
+  syncTimeWin();
+}
+function syncTimeWin() {
+  const all = timeWin.d0 === 0 && timeWin.d1 === ARR.days;
+  document.querySelectorAll(".win-chips .chip").forEach((c) => {
+    const n = +c.dataset.n;
+    c.setAttribute("aria-pressed", String(n ? timeWin.d1 === ARR.days && timeWin.d0 === ARR.days - n + 1 : all));
+  });
+  const txt = all ? "Drag across a chart to zoom in." : isoDay(timeWin.d0) + " to " + isoDay(timeWin.d1) + "; double-click a chart to show all.";
+  document.querySelectorAll(".win-label").forEach((s) => { s.textContent = txt; });
+}
+// Day-start gridlines and labels for the window: month starts for long windows, every week, 3 days or day for short ones.
+function timeAxis(svg, x, top, bottom, H, pw, left) {
+  const { d0, d1 } = timeWin, span = d1 - d0 + 1, every = span > 75 ? 0 : span > 35 ? 7 : span > 16 ? 3 : 1;
+  const lab = (d, txt, anchor) => { const t = svgEl("text", { x: x(d), y: H - 8, "text-anchor": anchor, fill: "var(--muted)", "font-size": 11 }); t.textContent = txt; svg.append(t); };
+  lab(d0, monthDay(d0), "start");
+  let last = x(d0);
+  for (let d = d0 + 1; d <= d1; d++) {
+    if (every ? (d - d0) % every : dayDate(d).getUTCDate() !== 1) continue;
+    svg.append(svgEl("line", { x1: x(d), x2: x(d), y1: top, y2: bottom, stroke: "var(--grid)", "stroke-width": 1 }));
+    const txt = every ? monthDay(d) : MONTHS[dayDate(d).getUTCMonth()];
+    if (x(d) - last > 56 && x(d) + 20 < left + pw) { lab(d, txt, "middle"); last = x(d); }
+  }
+}
+// Drag across a chart to zoom both charts to those days; double-click for all. Returns whether a drag is under way.
+function addBrush(svg, hit, W, left, pw, top, ph, onDrag) {
+  const sel = svgEl("rect", { y: top, height: ph, fill: "var(--accent)", "fill-opacity": 0.12, stroke: "var(--accent)",
+    "stroke-width": 1, visibility: "hidden", "pointer-events": "none" });
+  svg.append(sel);
+  const span = timeWin.d1 - timeWin.d0 + 1;
+  const sx = (ev) => { const r = svg.getBoundingClientRect(); return Math.max(left, Math.min(left + pw, (ev.clientX - r.left) * (W / r.width))); };
+  const dayAt = (px) => Math.max(timeWin.d0, Math.min(timeWin.d1, timeWin.d0 + Math.floor((px - left) / pw * span)));
+  let start = null;
+  hit.addEventListener("pointerdown", (ev) => { if (ev.button) return; start = sx(ev); hit.setPointerCapture(ev.pointerId); });
+  hit.addEventListener("pointermove", (ev) => {
+    if (start === null) return;
+    const a = Math.min(start, sx(ev)), b = Math.max(start, sx(ev));
+    if (b - a > 3) { sel.setAttribute("x", a); sel.setAttribute("width", b - a); sel.setAttribute("visibility", "visible"); onDrag(); }
+  });
+  hit.addEventListener("pointerup", (ev) => {
+    if (start === null) return;
+    const a = Math.min(start, sx(ev)), b = Math.max(start, sx(ev));
+    start = null; sel.setAttribute("visibility", "hidden");
+    if (b - a > 6 && dayAt(b) > dayAt(a)) setTimeWin(dayAt(a), dayAt(b));
+  });
+  hit.addEventListener("pointercancel", () => { start = null; sel.setAttribute("visibility", "hidden"); });
+  hit.addEventListener("dblclick", () => setTimeWin(0, ARR.days));
+  return () => start !== null && sel.getAttribute("visibility") === "visible";
+}
+
 function catchupSeries(rows) {
   const shown = new Set(rows.map((r) => r.j.jd)), kinds = new Set(selKinds());
   let missN = 0, missB = 0;
@@ -766,34 +857,34 @@ function renderCatchup(rows) {
     { key: "cn", tot: S.totN, label: "Files", short: "Files", color: "var(--series-1)", dash: "" },
     { key: "cb", tot: S.totB, label: "Data volume", short: "Volume", color: "var(--series-1)", dash: "6 4" },
   ];
-  const W = Math.max(320, host.clientWidth), H = 240, left = 40, right = W < 520 ? 92 : 128, top = 10, bottom = 26;
-  const pw = W - left - right, ph = H - top - bottom, nd = ARR.days + 1;
-  const maxP = Math.max(...series.map((s) => pct(S.pts[S.pts.length - 1][s.key], s.tot)));
-  const step = maxP <= 20 ? 5 : maxP <= 45 ? 10 : 20;
-  const yMax = Math.min(100, Math.max(step, Math.ceil(maxP * 1.15 / step) * step));
-  const x = (d) => left + (d / nd) * pw, y = (p) => top + ph - (p / yMax) * ph;
+  const W = Math.max(320, host.clientWidth), H = 240, left = 44, right = W < 520 ? 92 : 128, top = 10, bottom = 26;
+  const pw = W - left - right, ph = H - top - bottom, { d0, d1 } = timeWin, span = d1 - d0 + 1;
+  // The line starts at the start of day d0 (the running total at the end of the day before; 0 at the end of data
+  // taking) and has a point at the end of each day after that.
+  const at = (d, s) => pct(d < 0 ? 0 : S.pts[d][s.key], s.tot);  // running share at the end of day d
+  const vis = series.flatMap((s) => { const v = [at(d0 - 1, s)]; for (let d = d0; d <= d1; d++) v.push(at(d, s)); return v; });
+  // Show the whole window: from 0 for the full range, otherwise just the part of the axis the lines use.
+  const lo = d0 === 0 ? 0 : Math.min(...vis), hi = Math.max(...vis);
+  const raw = Math.max(hi - lo, 0.5) * 1.15 / 4, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((f) => f * mag).find((v) => v >= raw);
+  const yMin = Math.max(0, Math.floor(lo / step) * step), yMax = Math.min(100, Math.max(yMin + step, Math.ceil((hi + (hi - lo) * 0.15) / step) * step));
+  const x = (d) => left + ((d - d0) / span) * pw, y = (p) => top + ph - ((p - yMin) / (yMax - yMin)) * ph;
   const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
-    "aria-label": "Cumulative share of the files and data missing at the end of data taking that have since arrived at NRAO" });
-  for (let p = 0; p <= yMax + 1e-9; p += step) {  // recessive grid + y labels
-    svg.append(svgEl("line", { x1: left, x2: left + pw, y1: y(p), y2: y(p), stroke: p ? "var(--grid)" : "var(--axis)", "stroke-width": 1 }));
-    const t = svgEl("text", { x: left - 6, y: y(p) + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11 }); t.textContent = p + "%"; svg.append(t);
+    "aria-label": "Cumulative share of the files and data missing at the end of data taking that have since arrived at NRAO, " +
+                  isoDay(d0) + " to " + isoDay(d1) });
+  for (let p = yMin; p <= yMax + step * 1e-6; p += step) {  // recessive grid + y labels
+    svg.append(svgEl("line", { x1: left, x2: left + pw, y1: y(p), y2: y(p), stroke: p > yMin ? "var(--grid)" : "var(--axis)", "stroke-width": 1 }));
+    const t = svgEl("text", { x: left - 6, y: y(p) + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11 });
+    t.textContent = +p.toFixed(2) + "%"; svg.append(t);
   }
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const xl = (d, txt, anchor) => { const t = svgEl("text", { x: x(d), y: H - 8, "text-anchor": anchor, fill: "var(--muted)", "font-size": 11 }); t.textContent = txt; svg.append(t); };
-  xl(0, months[dayDate(0).getUTCMonth()] + " " + dayDate(0).getUTCDate(), "start");
-  for (let d = 1; d < nd; d++) {
-    const t = dayDate(d);
-    if (t.getUTCDate() !== 1) continue;
-    svg.append(svgEl("line", { x1: x(d), x2: x(d), y1: top, y2: top + ph, stroke: "var(--grid)", "stroke-width": 1 }));
-    if (x(d) - x(0) > 56) xl(d, months[t.getUTCMonth()], "middle");
-  }
-  // lines: 0% at the end of data taking, then the running total at the end of each day
+  timeAxis(svg, x, top, top + ph, H, pw, left);
   const ends = [];
   for (const s of series) {
-    const pts = [[x(0), y(0)], ...S.pts.map((p) => [x(p.d + 1), y(pct(p[s.key], s.tot))])];
-    svg.append(svgEl("polyline", { points: pts.map((p) => p.join(",")).join(" "), fill: "none", stroke: s.color,
+    const pts = [[x(d0), y(at(d0 - 1, s))]];
+    for (let d = d0; d <= d1; d++) pts.push([x(d + 1), y(at(d, s))]);
+    svg.append(svgEl("polyline", { points: pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" "), fill: "none", stroke: s.color,
       "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": s.dash ? "butt" : "round", "stroke-dasharray": s.dash }));
-    ends.push({ s, px: pts[pts.length - 1][0], py: pts[pts.length - 1][1], v: S.pts[S.pts.length - 1][s.key] });
+    ends.push({ s, px: pts[pts.length - 1][0], py: pts[pts.length - 1][1], v: S.pts[d1][s.key] });
   }
   // direct labels at the line ends, nudged apart if they would overlap
   ends.sort((a, b) => a.py - b.py);
@@ -803,17 +894,20 @@ function renderCatchup(rows) {
     const t = svgEl("text", { x: e.px + 8, y: (e.ly ?? e.py) + 4, fill: "var(--ink-2)", "font-size": 12 });
     t.textContent = (W < 520 ? e.s.short : e.s.label) + " " + fmtPct(e.v, e.s.tot); svg.append(t);
   }
-  // hover: crosshair snapped to the nearest day, with a tooltip
+  // hover: crosshair snapped to the nearest day end, with a tooltip; drag to zoom
   const cross = svgEl("line", { y1: top, y2: top + ph, stroke: "var(--muted)", "stroke-width": 1, visibility: "hidden" });
   const dots = series.map((s) => svgEl("circle", { r: 4, fill: s.color, stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" }));
   svg.append(cross, ...dots);
-  const hit = svgEl("rect", { x: left, y: top, width: pw, height: ph, fill: "transparent" });
+  const hit = svgEl("rect", { x: left, y: top, width: pw, height: ph, fill: "transparent", style: "cursor: crosshair" });
   svg.append(hit);
   const tip = $("tip");
   const hide = () => { cross.setAttribute("visibility", "hidden"); dots.forEach((c) => c.setAttribute("visibility", "hidden")); tip.style.display = "none"; };
+  const dragging = addBrush(svg, hit, W, left, pw, top, ph, hide);
   hit.addEventListener("pointermove", (ev) => {
+    if (dragging()) return;
     const r = svg.getBoundingClientRect(), sx = (ev.clientX - r.left) * (W / r.width);
-    const d = Math.max(0, Math.min(ARR.days, Math.round((sx - left) / pw * nd) - 1));  // day d's point sits at d + 1
+    // day d's point sits at the end of the day, d + 1
+    const d = Math.max(Math.max(0, d0 - 1), Math.min(d1, Math.round(d0 + (sx - left) / pw * span) - 1));
     const p = S.pts[d], cx = x(d + 1);
     cross.setAttribute("x1", cx); cross.setAttribute("x2", cx); cross.setAttribute("visibility", "visible");
     series.forEach((s, i) => { dots[i].setAttribute("cx", cx); dots[i].setAttribute("cy", y(pct(p[s.key], s.tot))); dots[i].setAttribute("visibility", "visible"); });
@@ -907,51 +1001,45 @@ function renderIncoming(rows) {
     (m ? fmtBytes(all.copy[m]) + " of extra copies of files it already had (" + fmtBytes(recent.copy[m]) + " in the last 28 days)."
        : fmt(all.copy[m]) + " extra copies of files it already had (" + fmt(recent.copy[m]) + " in the last 28 days).");
   $("incoming-legend").replaceChildren(...series.map((s) => el("span", null, el("span", { class: "sw", style: "background:" + s.color }), s.label)));
+  // The grand total (in the tooltip and the table) always counts extra copies, even when the bars leave them out.
+  const grand = (b) => b.care[m] + b.other[m] + b.copy[m];
+  const asofTime = D.meta.nrao_asof.slice(11);
 
-  const W = Math.max(320, host.clientWidth), weekly = W < 600, step = weekly ? 7 : 1;
+  const W = Math.max(320, host.clientWidth), { d0, d1 } = timeWin, span = d1 - d0 + 1;
   const bins = [];
-  for (let s = 0; s < days.length; s += step) {
-    const b = incZero(); b.s = s; b.e = Math.min(days.length - 1, s + step - 1);
-    for (let d = b.s; d <= b.e; d++) incAdd(b, days[d]);
-    bins.push(b);
-  }
-  $("incoming-note").textContent = "Each bar is one " + (weekly ? "week" : "day") + " (UTC). Files we care about are the report's files " +
+  for (let d = d0; d <= d1; d++) { const b = incZero(); b.s = b.e = d; incAdd(b, days[d]); bins.push(b); }
+  $("incoming-note").textContent = "Each bar is one day (UTC). Files we care about are the report's files " +
     "(" + KINDS.map((k) => k.label).join(", ") + ") for the nights and kinds the page is showing, so the switch and filters above change them. " +
     "Other new files are the first copy at NRAO of anything else; hover for the breakdown. Extra copies are later copies of files NRAO " +
-    "already had, written to herastore03 disks; the databases can't tell whether they crossed the link or were copied within NRAO." +
+    "already had, written to herastore03 disks; the databases can't tell whether they crossed the link or were copied within NRAO. " +
+    "Hover for the grand total of everything NRAO recorded arriving that day, extra copies included even when the bars leave them out. " +
+    "The last day is partial: it runs only until " + D.meta.nrao_asof + "." +
     (state.kdisk !== "" || state.ndisk !== "" ? " With a disk filter on, files we care about are all files of the nights shown." : "");
 
   const H = 240, left = 48, right = 8, top = 22, bottom = 26, pw = W - left - right, ph = H - top - bottom;
   const tot = (b) => series.reduce((a, s) => a + b[s.key][m], 0);
-  const maxV = Math.max(1, ...bins.map(tot));
+  const maxV = Math.max(1, ...bins.map(tot));  // the y axis fits the bars of the days shown
   const unit = m ? (maxV >= 1e12 ? 1e12 : maxV >= 1e9 ? 1e9 : 1e6) : 1, uname = m ? { 1e12: "TB", 1e9: "GB", 1e6: "MB" }[unit] : "files";
   const raw = maxV / unit / 4, mag = 10 ** Math.floor(Math.log10(raw || 1));
   const stepY = [1, 2, 2.5, 5, 10].map((f) => f * mag).find((v) => v >= raw) || raw;
   const yMax = Math.max(stepY, Math.ceil(maxV / unit / stepY) * stepY);
   const yv = (v) => (v / unit / yMax) * ph, base = top + ph;
-  const xd = (d) => left + (d / days.length) * pw;
+  const xd = (d) => left + ((d - d0) / span) * pw;
   const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
-    "aria-label": "New copies recorded at NRAO per " + (weekly ? "week" : "day") + ", stacked by kind" });
-  const ttl = svgEl("text", { x: left, y: 12, fill: "var(--muted)", "font-size": 11 }); ttl.textContent = uname + " per " + (weekly ? "week" : "day"); svg.append(ttl);
+    "aria-label": "New copies recorded at NRAO per day, stacked by kind, " + isoDay(d0) + " to " + isoDay(d1) });
+  const ttl = svgEl("text", { x: left, y: 12, fill: "var(--muted)", "font-size": 11 }); ttl.textContent = uname + " per day"; svg.append(ttl);
   for (let v = 0; v <= yMax + 1e-9; v += stepY) {
     const yy = base - (v / yMax) * ph;
     svg.append(svgEl("line", { x1: left, x2: left + pw, y1: yy, y2: yy, stroke: v ? "var(--grid)" : "var(--axis)", "stroke-width": 1 }));
     const t = svgEl("text", { x: left - 6, y: yy + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11 });
     t.textContent = m ? String(+v.toFixed(2)) : fmt(Math.round(v)); svg.append(t);
   }
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const xl = (d, txt, anchor) => { const t = svgEl("text", { x: xd(d), y: H - 8, "text-anchor": anchor, fill: "var(--muted)", "font-size": 11 }); t.textContent = txt; svg.append(t); };
-  xl(0, months[dayDate(0).getUTCMonth()] + " " + dayDate(0).getUTCDate(), "start");
-  for (let d = 1; d < days.length; d++) {
-    const t = dayDate(d); if (t.getUTCDate() !== 1) continue;
-    svg.append(svgEl("line", { x1: xd(d), x2: xd(d), y1: top, y2: base, stroke: "var(--grid)", "stroke-width": 1 }));
-    if (xd(d) - xd(0) > 56) xl(d, months[t.getUTCMonth()], "middle");
-  }
+  timeAxis(svg, xd, top, base, H, pw, left);
   const band = svgEl("rect", { y: top, height: ph, fill: "var(--wash)", visibility: "hidden" });
   svg.append(band);
   const topRounded = (x, y, w, h, r) => { r = Math.min(r, w / 2, h);
     return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`; };
-  const bw = pw / bins.length, barW = Math.max(1, bw - 2);
+  const bw = pw / bins.length, barW = bw > 6 ? bw - 2 : Math.max(1, bw * 0.7);  // 2px gaps, narrower when bars are thin
   bins.forEach((b) => {
     const x = xd(b.s) + (bw - barW) / 2;
     const segs = series.map((s) => [s, yv(b[s.key][m])]).filter(([, h]) => h > 0);
@@ -965,17 +1053,24 @@ function renderIncoming(rows) {
     });
   });
   const tip = $("tip");
-  const hit = svgEl("rect", { x: left, y: top, width: pw, height: ph, fill: "transparent" });
+  const hit = svgEl("rect", { x: left, y: top, width: pw, height: ph, fill: "transparent", style: "cursor: crosshair" });
   svg.append(hit);
+  const hideTip = () => { band.setAttribute("visibility", "hidden"); tip.style.display = "none"; };
+  const dragging = addBrush(svg, hit, W, left, pw, top, ph, hideTip);
   hit.addEventListener("pointermove", (ev) => {
+    if (dragging()) return;
     const r = svg.getBoundingClientRect(), sx = (ev.clientX - r.left) * (W / r.width);
     const i = Math.max(0, Math.min(bins.length - 1, Math.floor((sx - left) / bw))), b = bins[i];
     band.setAttribute("x", xd(b.s)); band.setAttribute("width", bw); band.setAttribute("visibility", "visible");
     const row = (label, value, sw) => el("div", { class: "row" },
       el("span", { class: "tl" }, sw ? el("span", { class: "sw", style: "background:" + sw + ";margin-right:6px;vertical-align:-1px" }) : null, label),
       el("span", { text: value }));
-    const kids = [el("div", { class: "tv", text: weekly ? "Week of " + isoDay(b.s) : isoDay(b.s) })];
-    for (const s of series) kids.push(row(s.label, fv(b[s.key][m]), s.color));
+    const partial = b.e === days.length - 1 ? " (until " + asofTime + ")" : "";
+    const kids = [el("div", { class: "tv", text: isoDay(b.s) + partial }),
+      el("div", { class: "row", style: "font-weight:600" },
+        el("span", { class: "tl" }, "Grand total"),
+        el("span", { text: fv(grand(b)) }))];
+    for (const s of INC_SERIES) kids.push(row(s.label + (series.includes(s) ? "" : " (not in bars)"), fv(b[s.key][m]), s.color));
     b.parts.forEach((p, k) => { if (p[m]) kids.push(row("  \u00B7 " + OTHER_PARTS[k], fv(p[m]))); });
     const nw = b.care[m] + b.other[m];
     kids.push(el("div", { class: "small", text: "Files we care about: " + fmtPct(b.care[m], nw) + " of new files" }));
@@ -985,16 +1080,17 @@ function renderIncoming(rows) {
     tip.style.left = Math.min(window.innerWidth - tw - 8, ev.clientX + 14) + "px";
     tip.style.top = (ev.clientY + 14 + th > window.innerHeight ? ev.clientY - th - 10 : ev.clientY + 14) + "px";
   });
-  hit.addEventListener("pointerleave", () => { band.setAttribute("visibility", "hidden"); tip.style.display = "none"; });
+  hit.addEventListener("pointerleave", hideTip);
   host.replaceChildren(svg);
 
   // the same numbers by week, in the metric shown
-  const head = el("tr", null, ...["Week starting", ...INC_SERIES.map((s) => s.label), "Care-about share of new"].map((h, i) =>
+  const head = el("tr", null, ...["Week starting", "Grand total", ...INC_SERIES.map((s) => s.label), "Care-about share of new"].map((h, i) =>
     el("th", { class: i ? "num" : "", text: h, style: "cursor:default" })));
   const body = el("tbody");
   for (let s = 0; s < days.length; s += 7) {
     const w = incZero(); for (let d = s; d < Math.min(days.length, s + 7); d++) incAdd(w, days[d]);
-    body.append(el("tr", null, el("td", { text: isoDay(s) }), ...INC_SERIES.map((x) => el("td", { class: "num", text: fv(w[x.key][m]) })),
+    body.append(el("tr", null, el("td", { text: isoDay(s) + (s + 7 > days.length - 1 ? " (partial)" : "") }),
+      el("td", { class: "num", text: fv(grand(w)) }), ...INC_SERIES.map((x) => el("td", { class: "num", text: fv(w[x.key][m]) })),
       el("td", { class: "num", text: fmtPct(w.care[m], w.care[m] + w.other[m]) })));
   }
   $("incoming-table").replaceChildren(el("thead", null, head), body);
@@ -1013,6 +1109,7 @@ function render() {
 }
 initHeader();
 initIncoming();
+initTimeWin();
 render();
 let rt = null;
 window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => {

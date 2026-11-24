@@ -90,7 +90,7 @@ def load_nrao(args, dump, db_path):
     say(f"loading the NRAO Librarian from {dump} with {pg_restore}")
     tables = lsql.NRAO_TABLES
     lsql.load_into_sqlite(lsql.dump_command(pg_restore, dump, tables), db_path, tables,
-                          event_keep=lsql.nrao_events, event_payload=lsql.no_payload, info=dict(path=dump))
+                          event_keep=lsql.nrao_events, event_payload=lsql.nrao_payload, info=dict(path=dump))
 
 
 def karoo_backups(nrao_db):

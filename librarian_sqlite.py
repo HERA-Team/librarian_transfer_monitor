@@ -148,8 +148,13 @@ def nrao_events(name, etype):
     return etype == "create_instance"
 
 
-def no_payload(etype, raw):
-    return "{}"
+_STORE_RE = re.compile(r'"store_name":\s*"([^"\\]*)"')
+
+
+def nrao_payload(etype, raw):
+    """A create_instance payload (still COPY text) cut to the name of the disk the copy was written to."""
+    m = _STORE_RE.search(raw)
+    return json.dumps({"store_name": m.group(1)}) if m else "{}"
 
 
 # ---------------------------------------------------------------- loading

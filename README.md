@@ -31,7 +31,7 @@ name and md5 and at least one copy on an NRAO disk.
    pile up.
 2. **Loads from that backup** the tables the report needs into SQLite
    (`work/nrao.sqlite`): files, copies, disks, and the events that record when
-   each copy arrived.
+   each copy arrived and which disk it went to.
 3. **Uses the Karoo Librarian backup kept in `output/`**
    (`maint.YYYYMMDD.karoo.librarian.dbbackup.pgdump`, about 4 GB) and loads
    its copy events into `work/karoo/`.

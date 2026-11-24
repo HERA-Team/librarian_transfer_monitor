@@ -943,8 +943,11 @@ function renderCatchup(rows) {
 
 // ---------------------------------------------------------------- what's arriving at NRAO
 // Every new copy NRAO recorded since data taking ended. "Files we care about" = the report's files for the nights and
-// kinds the page is showing; "other new files" = the first copy of anything else; "extra copies" = later copies of
-// files NRAO already had (the databases can't say whether those crossed the link or were made within NRAO).
+// kinds the page is showing; "out" = the report's files that the switch and filters leave out (counted in the grand
+// total, but not drawn); "other new files" = the first copy of anything the report doesn't cover, whatever the filters;
+// "extra copies" = later copies of files NRAO already had (the databases can't say whether those crossed the link or
+// were made within NRAO). With a disk filter on, all of these count only files on that Karoo disk and copies written to
+// that NRAO disk; "away" holds the rest (shown, but not in the grand total).
 const INC = D.incoming;
 const incState = { metric: "bytes", copies: true };
 const INC_SERIES = [
@@ -952,25 +955,37 @@ const INC_SERIES = [
   { key: "other", label: "Other new files", color: "var(--series-2)" },
   { key: "copy", label: "Extra copies", color: "var(--series-3)" },
 ];
-const OTHER_PARTS = ["Report files outside this selection", "Autos", "Other zen.* products", "Database backups (maint.*)", "Other files"];
-const incZero = () => ({ care: [0, 0], other: [0, 0], copy: [0, 0], parts: OTHER_PARTS.map(() => [0, 0]) });
+const OUT_LABEL = "Report files outside this selection";
+const OTHER_PARTS = ["Same kinds, earlier nights", "Autos", "Other zen.* products", "Database backups (maint.*)", "Other files"];
+const incZero = () => ({ care: [0, 0], out: [0, 0], other: [0, 0], copy: [0, 0], away: [0, 0], parts: OTHER_PARTS.map(() => [0, 0]) });
 function incAdd(t, f) {
-  for (const k of ["care", "other", "copy"]) { t[k][0] += f[k][0]; t[k][1] += f[k][1]; }
+  for (const k of ["care", "out", "other", "copy", "away"]) { t[k][0] += f[k][0]; t[k][1] += f[k][1]; }
   f.parts.forEach((p, i) => { t.parts[i][0] += p[0]; t.parts[i][1] += p[1]; });
 }
 function incomingDays(rows) {
   const shown = new Set(rows.map((r) => r.j.jd)), kinds = new Set(selKinds());
+  const kd = state.kdisk, nd = state.ndisk;
   const days = Array.from({ length: ARR.days + 1 }, incZero);
-  for (const [d, cat, jd, n, b] of INC.rows) {
+  // km: bit mask of the Karoo disks holding the file; ns: the NRAO disk the copy was written to (-1 if unknown)
+  for (const [d, cat, jd, km, ns, n, b] of INC.rows) {
     if (d < 0 || d > ARR.days) continue;
     const day = days[d];
     let key = "other";
-    if (cat === 8) key = "copy";
-    else if (cat <= 2 && kinds.has(cat) && shown.has(jd)) key = "care";
+    if ((kd !== "" && !((km >> kd) & 1)) || (nd !== "" && ns !== nd)) key = "away";
+    else if (cat === 8) key = "copy";
+    else if (cat <= 2) key = kinds.has(cat) && shown.has(jd) ? "care" : "out";
     day[key][0] += n; day[key][1] += b;
-    if (key === "other") { const p = cat <= 3 ? 0 : cat - 3; day.parts[p][0] += n; day.parts[p][1] += b; }
+    if (key === "other") { day.parts[cat - 3][0] += n; day.parts[cat - 3][1] += b; }
   }
   return days;
+}
+// What the disk filters keep, in words ("" with neither on), and the label for everything they leave out.
+function diskScope() {
+  const k = state.kdisk === "" ? "" : kName(state.kdisk), n = state.ndisk === "" ? "" : nName(state.ndisk);
+  if (k && n) return { keep: "files from " + k + " written to " + n, away: "Not from " + k + " to " + n };
+  if (k) return { keep: "files from " + k, away: "Not from " + k };
+  if (n) return { keep: "copies written to " + n, away: "Not written to " + n };
+  return { keep: "", away: "" };
 }
 function initIncoming() {
   for (const [metric, label] of [["bytes", "Data volume"], ["files", "Files"]]) {
@@ -992,29 +1007,33 @@ function renderIncoming(rows) {
   const fv = (v) => m ? fmtBytes(v) : fmt(v) + " files";
   const total = (from) => { const t = incZero(); for (let d = from; d < days.length; d++) incAdd(t, days[d]); return t; };
   const all = total(0), recent = total(Math.max(0, days.length - 28));
+  const newOf = (b) => b.care[m] + b.out[m] + b.other[m];  // every first copy, drawn or not
   const say = (t, when) => {
-    const nw = t.care[m] + t.other[m], share = " (" + fmtPct(t.care[m], nw) + ")";
+    const nw = newOf(t), share = " (" + fmtPct(t.care[m], nw) + ")";
     return m ? when + ", NRAO received " + fmtBytes(nw) + " of new files, and " + fmtBytes(t.care[m]) + share + " of that was files we care about."
              : when + ", NRAO received " + fmt(nw) + " new files, and " + fmt(t.care[m]) + share + " of them were files we care about.";
   };
-  $("incoming-summary").textContent = say(all, "Since data taking ended") + " " + say(recent, "In the last 28 days") + " It also recorded " +
+  const scope = diskScope();
+  $("incoming-summary").textContent = (scope.keep ? "Counting only " + scope.keep + ". " : "") + say(all, "Since data taking ended") + " " + say(recent, "In the last 28 days") + " It also recorded " +
     (m ? fmtBytes(all.copy[m]) + " of extra copies of files it already had (" + fmtBytes(recent.copy[m]) + " in the last 28 days)."
        : fmt(all.copy[m]) + " extra copies of files it already had (" + fmt(recent.copy[m]) + " in the last 28 days).");
   $("incoming-legend").replaceChildren(...series.map((s) => el("span", null, el("span", { class: "sw", style: "background:" + s.color }), s.label)));
-  // The grand total (in the tooltip and the table) always counts extra copies, even when the bars leave them out.
-  const grand = (b) => b.care[m] + b.other[m] + b.copy[m];
+  // The grand total (in the tooltip and the table) counts everything NRAO recorded arriving, drawn or not.
+  const grand = (b) => newOf(b) + b.copy[m];
   const asofTime = D.meta.nrao_asof.slice(11);
 
   const W = Math.max(320, host.clientWidth), { d0, d1 } = timeWin, span = d1 - d0 + 1;
   const bins = [];
   for (let d = d0; d <= d1; d++) { const b = incZero(); b.s = b.e = d; incAdd(b, days[d]); bins.push(b); }
   $("incoming-note").textContent = "Each bar is one day (UTC). Files we care about are the report's files " +
-    "(" + KINDS.map((k) => k.label).join(", ") + ") for the nights and kinds the page is showing, so the switch and filters above change them. " +
-    "Other new files are the first copy at NRAO of anything else; hover for the breakdown. Extra copies are later copies of files NRAO " +
+    "(" + KINDS.map((k) => k.label).join(", ") + ") for the nights and kinds the page is showing, so the switch and filters above change them; " +
+    "the report's files they leave out are not drawn. Other new files are the first copy at NRAO of anything the report " +
+    "doesn't cover (autos, other zen.* products, earlier nights, database backups), whatever the filters; hover for the breakdown. Extra copies are later copies of files NRAO " +
     "already had, written to herastore03 disks; the databases can't tell whether they crossed the link or were copied within NRAO. " +
-    "Hover for the grand total of everything NRAO recorded arriving that day, extra copies included even when the bars leave them out. " +
+    "Hover for the grand total of everything NRAO recorded arriving that day, including what the bars leave out. " +
     "The last day is partial: it runs only until " + D.meta.nrao_asof + "." +
-    (state.kdisk !== "" || state.ndisk !== "" ? " With a disk filter on, files we care about are all files of the nights shown." : "");
+    (scope.keep ? " With a disk filter on, the bars and the grand total count only " + scope.keep +
+      (state.kdisk !== "" ? " (by the Karoo backup's record of what was on each disk)" : "") + "; hover to see how much else arrived." : "");
 
   const H = 240, left = 48, right = 8, top = 22, bottom = 26, pw = W - left - right, ph = H - top - bottom;
   const tot = (b) => series.reduce((a, s) => a + b[s.key][m], 0);
@@ -1070,10 +1089,13 @@ function renderIncoming(rows) {
       el("div", { class: "row", style: "font-weight:600" },
         el("span", { class: "tl" }, "Grand total"),
         el("span", { text: fv(grand(b)) }))];
-    for (const s of INC_SERIES) kids.push(row(s.label + (series.includes(s) ? "" : " (not in bars)"), fv(b[s.key][m]), s.color));
-    b.parts.forEach((p, k) => { if (p[m]) kids.push(row("  \u00B7 " + OTHER_PARTS[k], fv(p[m]))); });
-    const nw = b.care[m] + b.other[m];
-    kids.push(el("div", { class: "small", text: "Files we care about: " + fmtPct(b.care[m], nw) + " of new files" }));
+    for (const s of INC_SERIES) {
+      kids.push(row(s.label + (series.includes(s) ? "" : " (not in bars)"), fv(b[s.key][m]), s.color));
+      if (s.key === "care" && b.out[m]) kids.push(row(OUT_LABEL + " (not in bars)", fv(b.out[m])));
+      if (s.key === "other") b.parts.forEach((p, k) => { if (p[m]) kids.push(row("  \u00B7 " + OTHER_PARTS[k], fv(p[m]))); });
+    }
+    if (scope.away) kids.push(row(scope.away + " (not in total)", fv(b.away[m])));
+    kids.push(el("div", { class: "small", text: "Files we care about: " + fmtPct(b.care[m], newOf(b)) + " of new files" }));
     tip.replaceChildren(...kids);
     tip.style.display = "block";
     const tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -1084,14 +1106,16 @@ function renderIncoming(rows) {
   host.replaceChildren(svg);
 
   // the same numbers by week, in the metric shown
-  const head = el("tr", null, ...["Week starting", "Grand total", ...INC_SERIES.map((s) => s.label), "Care-about share of new"].map((h, i) =>
+  const cols = [INC_SERIES[0], { key: "out", label: OUT_LABEL }, ...INC_SERIES.slice(1)]
+    .concat(scope.away ? [{ key: "away", label: scope.away + " (not in total)" }] : []);
+  const head = el("tr", null, ...["Week starting", "Grand total", ...cols.map((s) => s.label), "Care-about share of new"].map((h, i) =>
     el("th", { class: i ? "num" : "", text: h, style: "cursor:default" })));
   const body = el("tbody");
   for (let s = 0; s < days.length; s += 7) {
     const w = incZero(); for (let d = s; d < Math.min(days.length, s + 7); d++) incAdd(w, days[d]);
     body.append(el("tr", null, el("td", { text: isoDay(s) + (s + 7 > days.length - 1 ? " (partial)" : "") }),
-      el("td", { class: "num", text: fv(grand(w)) }), ...INC_SERIES.map((x) => el("td", { class: "num", text: fv(w[x.key][m]) })),
-      el("td", { class: "num", text: fmtPct(w.care[m], w.care[m] + w.other[m]) })));
+      el("td", { class: "num", text: fv(grand(w)) }), ...cols.map((x) => el("td", { class: "num", text: fv(w[x.key][m]) })),
+      el("td", { class: "num", text: fmtPct(w.care[m], newOf(w)) })));
   }
   $("incoming-table").replaceChildren(el("thead", null, head), body);
 }

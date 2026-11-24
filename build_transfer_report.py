@@ -257,28 +257,40 @@ def build(con, karoo_nrao_conns, min_jd=0):
                         rows=[[d, jd, kind, a[0], a[1]] for (d, jd, kind), a in sorted(arrivals.items())])
 
     # Everything NRAO recorded a new copy of since data taking ended, not just the report's files: a file's first
-    # copy is a new arrival (by category); any later copy of a file NRAO already had is an extra copy.
+    # copy is a new arrival (by category); any later copy of a file NRAO already had is an extra copy. Each copy is
+    # tagged with the Karoo disks that hold the file (a bit mask of kstores indices; 0 if none) and the NRAO disk it
+    # was written to (an nstores index, from the event's store_name; -1 if the event doesn't say).
     log("tallying everything NRAO received since data taking ended")
     for sql in ("DROP TABLE IF EXISTS nev", "DROP TABLE IF EXISTS nevf", "DROP TABLE IF EXISTS nevs"):
         con.execute(sql)
-    con.execute("CREATE TABLE nev AS SELECT name, time FROM n.file_event WHERE type = 'create_instance' AND time > ?", (t0s,))
+    con.execute("""CREATE TABLE nev AS SELECT name, time,
+                     CASE WHEN json_valid(payload) THEN json_extract(payload, '$.store_name') END AS store
+                   FROM n.file_event WHERE type = 'create_instance' AND time > ?""", (t0s,))
     con.execute("CREATE INDEX nev_name ON nev(name)")
     con.execute("""CREATE TABLE nevf AS SELECT name, min(time) AS t FROM n.file_event
                    WHERE type = 'create_instance' AND name IN (SELECT name FROM nev) GROUP BY name""")
     con.execute("CREATE UNIQUE INDEX nevf_name ON nevf(name)")
     con.execute("CREATE TABLE nevs AS SELECT name, max(size) AS size FROM n.file WHERE name IN (SELECT name FROM nevf) GROUP BY name")
     con.execute("CREATE UNIQUE INDEX nevs_name ON nevs(name)")
-    incoming = {}
-    for name, t, first, size in con.execute("SELECT nev.name, nev.time, nevf.t, nevs.size FROM nev JOIN nevf USING (name) "
-                                            "LEFT JOIN nevs USING (name)"):
+    kmask = {}
+    for name, st in con.execute("SELECT name, store FROM k.file_instance WHERE name IN (SELECT name FROM nevf)"):
+        kmask[name] = kmask.get(name, 0) | (1 << kidx[int(st)])
+    nidx_by_name = {s["name"]: i for i, s in enumerate(nstores)}
+    incoming, unknown = {}, 0
+    for name, t, store, first, size in con.execute("SELECT nev.name, nev.time, nev.store, nevf.t, nevs.size "
+                                                   "FROM nev JOIN nevf USING (name) LEFT JOIN nevs USING (name)"):
         cat, jd = incoming_category(name, min_jd)
         if t != first:
             cat = 8
-        a = incoming.setdefault(((datetime.date.fromisoformat(t[:10]) - day0).days, cat, jd), [0, 0])
+        ns = nidx_by_name.get(store, -1)
+        unknown += ns < 0
+        key = ((datetime.date.fromisoformat(t[:10]) - day0).days, cat, jd, kmask.get(name, 0), ns)
+        a = incoming.setdefault(key, [0, 0])
         a[0] += 1
         a[1] += size or 0
-    log(f"  {sum(a[0] for a in incoming.values()):,} new copies, {len(incoming):,} (day, category, night) groups")
-    incoming_data = dict(cats=INCOMING_CATS, rows=[[d, c, jd, a[0], a[1]] for (d, c, jd), a in sorted(incoming.items())])
+    log(f"  {sum(a[0] for a in incoming.values()):,} new copies, {len(incoming):,} (day, category, night, disks) groups"
+        + (f"; {unknown:,} copies don't say which NRAO disk they went to" if unknown else ""))
+    incoming_data = dict(cats=INCOMING_CATS, rows=[list(k) + a for k, a in sorted(incoming.items())])
     return dict(
         arrivals=arrival_data, incoming=incoming_data,
         meta=dict(karoo_asof=(karoo_asof or "?")[:16] + " UTC", nrao_asof=(nrao_asof or "?")[:16] + " UTC",
